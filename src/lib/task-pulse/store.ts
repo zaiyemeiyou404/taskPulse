@@ -34,6 +34,11 @@ function loadDeletedIds(): Set<string> {
   }
 }
 
+function refreshDeletedIds() {
+  const onDisk = loadDeletedIds();
+  onDisk.forEach((id) => DELETED_IDS.add(id));
+}
+
 function saveDeletedId(taskId: string) {
   ensureDataDir();
   const ids = loadDeletedIds();
@@ -527,8 +532,7 @@ function resetTaskState(taskId: string, summary: string, progressText: string) {
 export function ensureStoreBooted() {
   if (booted) return;
   booted = true;
-  const deleted = loadDeletedIds();
-  deleted.forEach((id) => DELETED_IDS.add(id));
+  refreshDeletedIds();
   INITIAL_TASKS.forEach((snapshot) => {
     if (DELETED_IDS.has(snapshot.task.id)) return;
     const copy = deepClone(snapshot);
@@ -542,6 +546,7 @@ export function ensureStoreBooted() {
 
 export function listTasks() {
   ensureStoreBooted();
+  refreshDeletedIds();
   const liveSnapshots = listLiveSnapshots().filter((sn) => !DELETED_IDS.has(sn.task.id));
   const liveById = new Map(liveSnapshots.map((snapshot) => [snapshot.task.id, snapshot]));
   const inMemory = Array.from(TASKS.values())
@@ -553,6 +558,7 @@ export function listTasks() {
 
 export function getTaskSnapshot(taskId: string) {
   ensureStoreBooted();
+  refreshDeletedIds();
   if (DELETED_IDS.has(taskId)) return null;
   const fileSnapshot = readSnapshotFile(taskId);
   if (fileSnapshot && !DELETED_IDS.has(fileSnapshot.task.id)) return deepClone(fileSnapshot);
@@ -563,6 +569,7 @@ export function getTaskSnapshot(taskId: string) {
 
 export function getTaskVersion(taskId: string) {
   ensureStoreBooted();
+  refreshDeletedIds();
   if (DELETED_IDS.has(taskId)) return 0;
   const fileSnapshot = readSnapshotFile(taskId);
   if (fileSnapshot && !DELETED_IDS.has(fileSnapshot.task.id)) return fileSnapshot.version;
@@ -615,6 +622,7 @@ export function createTask(input: CreateTaskInput) {
 
 export function stopTask(taskId: string) {
   ensureStoreBooted();
+  refreshDeletedIds();
   clearSimulation(taskId);
   const liveSnapshot = readSnapshotFile(taskId);
   if (liveSnapshot) {
@@ -650,6 +658,7 @@ export function stopTask(taskId: string) {
 
 export function deleteTask(taskId: string): boolean {
   ensureStoreBooted();
+  refreshDeletedIds();
   clearSimulation(taskId);
   clearRunner(taskId);
 
@@ -688,6 +697,7 @@ export function deleteTask(taskId: string): boolean {
 
 export function retryTask(taskId: string) {
   ensureStoreBooted();
+  refreshDeletedIds();
   const liveSnapshot = readSnapshotFile(taskId);
   if (liveSnapshot) {
     const workerPid = typeof liveSnapshot.task.metadata.workerPid === "number" ? liveSnapshot.task.metadata.workerPid : null;
