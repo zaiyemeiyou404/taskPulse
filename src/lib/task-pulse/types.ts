@@ -1,0 +1,91 @@
+export type TaskStatus = "queued" | "running" | "blocked" | "done" | "failed" | "stopped";
+
+export type TaskCategory = "chat" | "ppt" | "paper" | "coding";
+
+export type TaskPhase =
+  | "queued"
+  | "triaging"
+  | "accepted"
+  | "booting_runner"
+  | "coding"
+  | "testing"
+  | "summarizing"
+  | "waiting_review"
+  | "completed"
+  | "failed";
+
+export type EventLevel = "info" | "success" | "warning" | "error";
+
+export type Task = {
+  id: string;
+  title: string;
+  prompt: string;
+  status: TaskStatus;
+  phase: TaskPhase;
+  category: TaskCategory;
+  runner: string;
+  model: string;
+  source: string;
+  summary: string;
+  progressText: string;
+  needsHuman: boolean;
+  startedAt: string;
+  updatedAt: string;
+  endedAt: string | null;
+  durationMs: number;
+  eventCount: number;
+  logCount: number;
+  notificationCount: number;
+  progressPercent: number;
+  metadata: Record<string, unknown>;
+};
+
+export type TaskEvent = {
+  id: string;
+  taskId: string;
+  type: string;
+  level: EventLevel;
+  message: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type TaskLog = {
+  id: string;
+  taskId: string;
+  stream: "stdout" | "stderr" | "system";
+  level: EventLevel;
+  content: string;
+  createdAt: string;
+};
+
+export type TaskArtifact = {
+  id: string;
+  taskId: string;
+  name: string;
+  kind: "report" | "patch" | "bundle" | "link" | "json";
+  path?: string;
+  url?: string;
+  sizeBytes?: number;
+  createdAt: string;
+};
+
+export type TaskNotification = {
+  id: string;
+  taskId: string;
+  channel: string;
+  eventType: string;
+  target: string;
+  status: "queued" | "sent" | "failed";
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type TaskSnapshot = {
+  task: Task;
+  events: TaskEvent[];
+  logs: TaskLog[];
+  artifacts: TaskArtifact[];
+  notifications: TaskNotification[];
+  version: number;
+};
