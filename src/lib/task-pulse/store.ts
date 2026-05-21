@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
-import { mkdirSync, existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, readdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import * as path from "node:path";
 import { type Readable } from "node:stream";
 import { INITIAL_TASKS } from "./mock-data";
@@ -10,6 +10,7 @@ const TASKS = new Map<string, TaskSnapshot>();
 const versions = new Map<string, number>();
 const ACTIVE_RUNNERS = new Map<string, RunnerHandle>();
 const SIMULATION_TIMERS = new Map<string, NodeJS.Timeout[]>();
+const DELETED_IDS = new Set<string>();
 let booted = false;
 let counter = 0;
 
@@ -20,6 +21,26 @@ const DATA_DIR = path.join(DEFAULT_CWD, ".task-pulse-data");
 const LIVE_RUNNER_SCRIPT = path.join(DEFAULT_CWD, "scripts/task-pulse-live-runner.js");
 const HERMES_RUNNER_SCRIPT = path.join(DEFAULT_CWD, "scripts/task-pulse-hermes-runner.js");
 const BLOCKED_MS = 2 * 60 * 1000;
+
+const TOMBSTONE_FILE = path.join(DEFAULT_CWD, ".task-pulse-data", ".deleted-task-ids.json");
+
+function loadDeletedIds(): Set<string> {
+  try {
+    if (!existsSync(TOMBSTONE_FILE)) return new Set();
+    const raw = JSON.parse(readFileSync(TOMBSTONE_FILE, "utf8")) as string[];
+    return new Set(raw);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDeletedId(taskId: string) {
+  ensureDataDir();
+  const ids = loadDeletedIds();
+  ids.add(taskId);
+  writeFileSync(TOMBSTONE_FILE, JSON.stringify(Array.from(ids), null, 2));
+  DELETED_IDS.add(taskId);
+}
 
 type RunnerMode = "demo" | "live";
 
@@ -158,7 +179,7 @@ function readSnapshotFile(taskId: string) {
 function listLiveSnapshots() {
   ensureDataDir();
   return readdirSync(DATA_DIR)
-    .filter((name) => name.endsWith('.json'))
+    .filter((name) => name.endsWith('.json') && !name.startsWith('.deleted-task-ids'))
     .map((name) => {
       try {
         return JSON.parse(readFileSync(path.join(DATA_DIR, name), 'utf8')) as TaskSnapshot;
@@ -506,19 +527,25 @@ function resetTaskState(taskId: string, summary: string, progressText: string) {
 export function ensureStoreBooted() {
   if (booted) return;
   booted = true;
+  const deleted = loadDeletedIds();
+  deleted.forEach((id) => DELETED_IDS.add(id));
   INITIAL_TASKS.forEach((snapshot) => {
+    if (DELETED_IDS.has(snapshot.task.id)) return;
     const copy = deepClone(snapshot);
     TASKS.set(copy.task.id, copy);
     versions.set(copy.task.id, copy.version);
   });
-  startSimulation("task_demo_live");
+  if (!DELETED_IDS.has("task_demo_live")) {
+    startSimulation("task_demo_live");
+  }
 }
 
 export function listTasks() {
   ensureStoreBooted();
-  const liveById = new Map(listLiveSnapshots().map((snapshot) => [snapshot.task.id, snapshot]));
+  const liveSnapshots = listLiveSnapshots().filter((sn) => !DELETED_IDS.has(sn.task.id));
+  const liveById = new Map(liveSnapshots.map((snapshot) => [snapshot.task.id, snapshot]));
   const inMemory = Array.from(TASKS.values())
-    .filter((snapshot) => !liveById.has(snapshot.task.id))
+    .filter((snapshot) => !DELETED_IDS.has(snapshot.task.id) && !liveById.has(snapshot.task.id))
     .map((snapshot) => deepClone(snapshot.task));
   const live = Array.from(liveById.values()).map((snapshot) => deepClone(snapshot.task));
   return [...live, ...inMemory].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
@@ -526,16 +553,19 @@ export function listTasks() {
 
 export function getTaskSnapshot(taskId: string) {
   ensureStoreBooted();
+  if (DELETED_IDS.has(taskId)) return null;
   const fileSnapshot = readSnapshotFile(taskId);
-  if (fileSnapshot) return deepClone(fileSnapshot);
+  if (fileSnapshot && !DELETED_IDS.has(fileSnapshot.task.id)) return deepClone(fileSnapshot);
   const snapshot = TASKS.get(taskId);
+  if (snapshot && DELETED_IDS.has(snapshot.task.id)) return null;
   return snapshot ? deepClone(snapshot) : null;
 }
 
 export function getTaskVersion(taskId: string) {
   ensureStoreBooted();
+  if (DELETED_IDS.has(taskId)) return 0;
   const fileSnapshot = readSnapshotFile(taskId);
-  if (fileSnapshot) return fileSnapshot.version;
+  if (fileSnapshot && !DELETED_IDS.has(fileSnapshot.task.id)) return fileSnapshot.version;
   return versions.get(taskId) ?? 0;
 }
 
@@ -637,6 +667,7 @@ export function deleteTask(taskId: string): boolean {
   const exists = TASKS.has(taskId) || existsSync(liveFile);
   if (!exists) return false;
 
+  saveDeletedId(taskId);
   TASKS.delete(taskId);
   versions.delete(taskId);
   ACTIVE_RUNNERS.delete(taskId);
@@ -648,9 +679,8 @@ export function deleteTask(taskId: string): boolean {
         try { renameSync(workerLog, `${workerLog}.deleted`); } catch {}
         try { renameSync(workerLog, `/tmp/${taskId}.worker.log`); } catch {}
       }
+      rmSync(liveFile);
     }
-    if (existsSync(liveFile)) renameSync(liveFile, `${liveFile}.deleted`);
-    try { renameSync(liveFile, `/tmp/${taskId}.json`); } catch {}
   } catch {}
 
   return true;
