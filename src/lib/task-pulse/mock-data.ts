@@ -43,7 +43,7 @@ export const INITIAL_TASKS: TaskSnapshot[] = [
       log("task_demo_live", "stdout", "info", "准备进入测试阶段", now - 1000 * 18),
     ],
     artifacts: [
-      artifact("task_demo_live", "Live UI 规格说明", "report", now - 1000 * 60 * 4, "/artifacts/task-pulse-spec.md"),
+      artifact("task_demo_live", "Live UI 规格说明", "report", now - 1000 * 60 * 4, "/api/tasks/task_demo_live"),
     ],
     notifications: [
       notification("task_demo_live", "task.started", "sent", now - 1000 * 60 * 9),
@@ -181,7 +181,7 @@ function notification(taskId: string, eventType: string, status: TaskNotificatio
     channel: "微信",
     target: "weixin:o9cq8070Ill3Nq2HQBoDp8qBgPts@im.wechat",
     status,
-    payload: { mode: "proactive" },
+    payload: { taskUrl: `/tasks/${taskId}`, mode: "proactive" },
     createdAt: new Date(ts).toISOString(),
   };
 }

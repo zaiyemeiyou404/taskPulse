@@ -248,7 +248,7 @@ function addArtifact(taskId: string, name: string, kind: TaskArtifact["kind"], p
     taskId,
     name,
     kind,
-    path: path ?? `/artifacts/${name}`,
+    path: path ?? `/api/tasks/${taskId}`,
     createdAt: new Date().toISOString(),
   });
   mark(taskId);

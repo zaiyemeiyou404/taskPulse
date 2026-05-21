@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, Bell, Bot, Clock3, Copy, FileJson2, FolderGit2, PauseCircle, PlayCircle, Sparkles, SquareTerminal, Trash2 } from "lucide-react";
+import { Activity, Bell, Bot, Clock3, Copy, ExternalLink, FileDown, FileJson2, FolderGit2, PauseCircle, PlayCircle, Sparkles, SquareTerminal, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { TaskFlowPipeline } from "@/components/task-pulse/flow-pipeline";
 import { TaskSnapshot } from "@/lib/task-pulse/types";
-import { cn, formatDateTime, formatDuration, formatRelative, generateCodingReleaseNotes, phaseLabel, statusLabel, summarizeTaskActions } from "@/lib/task-pulse/utils";
+import { artifactActionExternal, artifactActionHref, artifactActionLabel, artifactDisplayPath, artifactFileDownloadUrl, cn, formatDateTime, formatDuration, formatRelative, generateCodingReleaseNotes, getTaskQuickLinks, phaseLabel, summarizeTaskActions } from "@/lib/task-pulse/utils";
 
 const phaseOrder = ["queued", "triaging", "accepted", "booting_runner", "coding", "testing", "summarizing", "waiting_review", "completed", "failed"] as const;
 const tabs = ["概览", "产物", "文件", "通知", "原始JSON"] as const;
@@ -109,6 +109,34 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
           }} />
         </div>
       </section>
+
+      {/* ---- 快速入口 / Quick links ---- */}
+      {(() => {
+        const links = getTaskQuickLinks(snapshot);
+        if (links.length === 0) return null;
+        return (
+          <section className="rounded-[26px] border border-white/10 bg-white/5 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-white">快速入口</h2>
+              <span className="text-xs text-slate-500">Quick Links</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {links.map((link, i) => (
+                <a
+                  key={i}
+                  href={link.href}
+                  target={link.external ? "_blank" : undefined}
+                  rel={link.external ? "noopener noreferrer" : undefined}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs text-cyan-200 transition hover:bg-white/10 hover:text-cyan-100"
+                >
+                  {link.label}
+                  {link.external ? <ExternalLink className="h-3 w-3" /> : null}
+                </a>
+              ))}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ---- 通俗易懂的总结 ---- */}
       <section className="rounded-[26px] border border-white/10 bg-white/5 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
@@ -264,15 +292,48 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
           )}
           {activeTab === "产物" && (
             <div className="grid gap-3">
-              {snapshot.artifacts.length === 0 ? <EmptyState label="暂无产物" /> : snapshot.artifacts.map((artifact) => (
-                <div key={artifact.id} className="flex items-center justify-between rounded-2xl border border-white/8 bg-[#0A0E15] px-4 py-3">
-                  <div>
-                    <div className="font-medium text-white">{artifact.name}</div>
-                    <div className="text-sm text-slate-400">{artifact.kind} · {formatDateTime(artifact.createdAt)}</div>
+              {snapshot.artifacts.length === 0 ? <EmptyState label="暂无产物" /> : snapshot.artifacts.map((artifact) => {
+                const href = artifactActionHref(artifact);
+                const label = artifactActionLabel(artifact);
+                const external = artifactActionExternal(artifact);
+                const downloadHref = artifactFileDownloadUrl(artifact);
+                return (
+                  <div key={artifact.id} className="rounded-2xl border border-white/8 bg-[#0A0E15] px-4 py-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="font-medium text-white">{artifact.name}</div>
+                        <div className="truncate text-sm text-slate-400">{artifact.kind} · {formatDateTime(artifact.createdAt)}</div>
+                        <div className="mt-1 truncate text-xs text-slate-500">{artifactDisplayPath(artifact)}</div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {href && (
+                          <a
+                            href={href}
+                            target={external ? "_blank" : undefined}
+                            rel={external ? "noopener noreferrer" : undefined}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3.5 py-1.5 text-xs font-medium text-cyan-200 transition hover:bg-cyan-400/20"
+                          >
+                            {external ? <ExternalLink className="h-3.5 w-3.5" /> : null}
+                            {label}
+                          </a>
+                        )}
+                        {downloadHref && (
+                          <a
+                            href={downloadHref}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+                          >
+                            <FileDown className="h-3.5 w-3.5" />
+                            下载
+                          </a>
+                        )}
+                        {!href && !downloadHref && (
+                          <span className="text-xs text-slate-500">内联</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-sm text-cyan-200">{artifact.path ?? artifact.url ?? "内联"}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {activeTab === "文件" && (

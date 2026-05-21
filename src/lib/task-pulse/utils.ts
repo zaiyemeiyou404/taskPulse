@@ -1,4 +1,4 @@
-import { TaskCategory, TaskSnapshot } from "./types";
+import { TaskArtifact, TaskCategory, TaskSnapshot } from "./types";
 
 export function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -202,6 +202,100 @@ export function summarizeTaskActions(snapshot: TaskSnapshot): string {
   }
 
   return parts.length > 0 ? parts.join("，") + "。" : "暂无详细记录。";
+}
+
+// ───────── Artifact helpers ─────────
+
+export function isAbsoluteHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
+export function isAppRoute(value: string) {
+  return value.startsWith("/");
+}
+
+export function artifactActionLabel(artifact: TaskArtifact) {
+  const url = artifact.url;
+  const path = artifact.path;
+
+  if (url && isAbsoluteHttpUrl(url)) return "打开";
+  if (url && isAppRoute(url)) return "查看";
+  if (path && isAppRoute(path)) return "查看";
+  if (path && !isAppRoute(path)) return "下载";
+
+  if (artifact.kind === "link") return "打开";
+  if (artifact.kind === "report") return "查看";
+  if (artifact.kind === "json") return "查看";
+
+  return "查看";
+}
+
+export function artifactActionHref(artifact: TaskArtifact): string | null {
+  const url = artifact.url;
+  const path = artifact.path;
+
+  if (url && (isAbsoluteHttpUrl(url) || isAppRoute(url))) return url;
+  if (path && isAppRoute(path)) return path;
+
+  return null;
+}
+
+export function artifactActionExternal(artifact: TaskArtifact) {
+  return Boolean(artifact.url && isAbsoluteHttpUrl(artifact.url));
+}
+
+export function artifactDisplayPath(artifact: TaskArtifact): string {
+  const url = artifact.url;
+  const path = artifact.path;
+
+  if (url) return url;
+  if (path) return path;
+  return "内联";
+}
+
+export function artifactFileDownloadUrl(artifact: TaskArtifact): string | null {
+  const path = artifact.path;
+  if (!path) return null;
+  if (isAppRoute(path) || isAbsoluteHttpUrl(path)) return null;
+  return `/api/tasks/${artifact.taskId}/artifact/${encodeURIComponent(artifact.id)}`;
+}
+
+// ───────── Notification / Quick-link helpers ─────────
+
+export type QuickLink = {
+  label: string;
+  href: string;
+  external?: boolean;
+};
+
+export function getTaskQuickLinks(snapshot: TaskSnapshot): QuickLink[] {
+  const links: QuickLink[] = [];
+
+  links.push({ label: "详情页", href: `/tasks/${snapshot.task.id}` });
+  links.push({ label: "API 快照", href: `/api/tasks/${snapshot.task.id}` });
+
+  const latestArtifacts = snapshot.artifacts.slice(0, 3);
+  for (const a of latestArtifacts) {
+    const href = artifactActionHref(a);
+    if (href) {
+      links.push({
+        label: `产物: ${a.name}`,
+        href,
+        external: artifactActionExternal(a),
+      });
+    }
+  }
+
+  const notificationUrls = new Set<string>();
+  for (const n of snapshot.notifications) {
+    const taskUrl = n.payload?.taskUrl;
+    if (typeof taskUrl === "string" && !notificationUrls.has(taskUrl)) {
+      notificationUrls.add(taskUrl);
+      links.push({ label: `通知: ${n.eventType}`, href: taskUrl });
+    }
+  }
+
+  return links;
 }
 
 export type FlowStep = { key: string; label: string; icon: string };

@@ -70,6 +70,11 @@ export type TaskArtifact = {
   createdAt: string;
 };
 
+export type NotificationPayload = {
+  taskUrl?: string;
+  mode?: string;
+};
+
 export type TaskNotification = {
   id: string;
   taskId: string;
@@ -77,7 +82,7 @@ export type TaskNotification = {
   eventType: string;
   target: string;
   status: "queued" | "sent" | "failed";
-  payload: Record<string, unknown>;
+  payload: NotificationPayload;
   createdAt: string;
 };
 
