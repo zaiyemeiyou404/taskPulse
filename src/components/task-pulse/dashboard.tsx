@@ -3,7 +3,7 @@ import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, Clock3, Layers3
 import { TaskLauncher } from "@/components/task-pulse/task-launcher";
 import { DashboardDeleteButton } from "@/components/task-pulse/dashboard-client";
 import { listTasks } from "@/lib/task-pulse/store";
-import { categoryInfo, cn, formatDuration, formatRelative, phaseLabel, statusLabel } from "@/lib/task-pulse/utils";
+import { categoryInfo, cn, formatDateTime, formatDuration, formatRelative, phaseLabel, statusLabel } from "@/lib/task-pulse/utils";
 import { Task, TaskCategory } from "@/lib/task-pulse/types";
 
 const statConfig = {
@@ -106,7 +106,7 @@ export function TaskDashboard() {
                     </td>
                     <td className="px-4 py-3"><span className={statusStyles[task.status] ?? "text-slate-300"}>{statusLabel(task.status)}</span></td>
                     <td className="px-4 py-3 text-slate-300">{phaseLabel(task.phase)}</td>
-                    <td className="px-4 py-3 text-slate-400">{formatRelative(task.updatedAt)}</td>
+                    <td className="px-4 py-3 text-slate-400">{formatRelative(task.updatedAt)}<br /><span className="text-[11px] text-slate-500">修改 {formatDateTime(task.updatedAt)}</span></td>
                     <td className="px-4 py-3 text-slate-300">{formatDuration(task.durationMs)}</td>
                     <td className="px-4 py-3 text-slate-300">{task.needsHuman ? "是" : "否"}</td>
                     <td className="px-4 py-3">
@@ -222,7 +222,7 @@ function TaskCard({ task }: { task: Task }) {
 
       <div className="flex items-center justify-between gap-4 text-sm">
         <div className="flex items-center gap-4 text-xs text-slate-400">
-          <span>最后事件: {formatRelative(task.updatedAt)}</span>
+          <span>最后事件: {formatRelative(task.updatedAt)}<span className="ml-2 text-slate-500">修改 {formatDateTime(task.updatedAt)}</span></span>
           <span>需人工: {task.needsHuman ? "是" : "否"}</span>
         </div>
       </div>

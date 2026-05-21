@@ -90,7 +90,7 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
           <div className="grid w-full max-w-xl grid-cols-2 gap-3 lg:grid-cols-3">
             <MetricCard label="阶段" value={phaseLabel(snapshot.task.phase)} icon={Sparkles} />
             <MetricCard label="耗时" value={formatDuration(snapshot.task.durationMs)} icon={Clock3} />
-            <MetricCard label="最近更新" value={formatRelative(snapshot.task.updatedAt)} icon={Activity} />
+            <MetricCard label="最近更新" value={<>{formatRelative(snapshot.task.updatedAt)}<br /><span className="text-xs font-normal text-slate-500">{formatDateTime(snapshot.task.updatedAt)}</span></>} icon={Activity} />
             <MetricCard label="事件" value={String(snapshot.events.length)} icon={FileJson2} />
             <MetricCard label="日志" value={String(snapshot.logs.length)} icon={SquareTerminal} />
             <MetricCard label="通知" value={String(snapshot.notifications.length)} icon={Bell} />
@@ -287,7 +287,7 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
               <InfoCard icon={Bot} title="目标" text={snapshot.task.prompt} />
               <InfoCard icon={Sparkles} title="当前摘要" text={snapshot.task.summary} />
               <InfoCard icon={Activity} title="进度" text={`${snapshot.task.progressPercent}% · ${snapshot.task.progressText}`} />
-              <InfoCard icon={Clock3} title="时间" text={`开始 ${formatDateTime(snapshot.task.startedAt)} · 更新 ${formatDateTime(snapshot.task.updatedAt)}`} />
+              <InfoCard icon={Clock3} title="时间" text={`开始 ${formatDateTime(snapshot.task.startedAt)} · 修改 ${formatDateTime(snapshot.task.updatedAt)}`} />
             </div>
           )}
           {activeTab === "产物" && (
@@ -368,7 +368,7 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
   );
 }
 
-function MetricCard({ label, value, icon: Icon }: { label: string; value: string; icon: React.ComponentType<{ className?: string }> }) {
+function MetricCard({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon: React.ComponentType<{ className?: string }> }) {
   return (
     <div className="rounded-[22px] border border-white/10 bg-black/15 p-4">
       <div className="flex items-center gap-2 text-sm text-slate-400"><Icon className="h-4 w-4" />{label}</div>
