@@ -1,4 +1,4 @@
-import { TaskArtifact, TaskCategory, TaskSnapshot } from "./types";
+import { AUTO_GROUP_MAP, ChatTraceRecord, TaskArtifact, TaskCategory, TaskSnapshot } from "./types";
 
 export function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -56,6 +56,7 @@ export function statusLabel(status: string) {
     queued: "排队",
     running: "执行中",
     blocked: "卡住待处理",
+    approval_required: "待命令同意",
     done: "已完成",
     failed: "失败",
     stopped: "已停止",
@@ -72,15 +73,110 @@ export const categoryInfo: Record<TaskCategory, { label: string; color: string; 
 
 export function inferTitle(prompt: string, category: TaskCategory, runner: string): string {
   const trimmed = prompt.trim();
+  const catLabel = categoryInfo[category]?.label ?? "任务";
   if (trimmed.length <= 3) {
-    const catLabel = categoryInfo[category]?.label ?? "任务";
     const runnerLabel = runner === "hermes" ? "Hermes" : runner === "opencode" ? "OpenCode" : runner;
     return `${runnerLabel} ${catLabel}任务`;
+  }
+  const zhPattern = /[\u4e00-\u9fff]/;
+  if (zhPattern.test(trimmed)) {
+    const firstZhSentence = trimmed.match(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]{4,50}/);
+    if (firstZhSentence) return firstZhSentence[0].length > 30 ? firstZhSentence[0].slice(0, 30) + "…" : firstZhSentence[0];
+  }
+  const intentKeywords: Record<TaskCategory, string[]> = {
+    chat: ["回复", "回答", "讨论", "咨询", "帮忙", "解释", "翻译", "总结"],
+    ppt: ["演示", "幻灯片", "PPT", "展示", "演讲"],
+    paper: ["论文", "文章", "报告", "文献", "综述", "调研"],
+    coding: ["实现", "编写", "创建", "重构", "修复", "优化", "添加", "开发"],
+  };
+  const keywords = intentKeywords[category] ?? [];
+  for (const kw of keywords) {
+    if (trimmed.includes(kw)) {
+      const prefix = trimmed.slice(0, trimmed.indexOf(kw) + kw.length);
+      return prefix.length > 30 ? prefix.slice(0, 30) + "…" : prefix;
+    }
   }
   const maxLen = 40;
   const short = trimmed.length > maxLen ? trimmed.slice(0, maxLen) + "…" : trimmed;
   const lines = short.split("\n").filter(Boolean);
   return lines[0] ?? short;
+}
+
+export function inferGroupId(category: TaskCategory, customName?: string, repoLink?: string): string {
+  const name = customName || AUTO_GROUP_MAP[category] || category;
+  const seed = ((name || "") + (repoLink ? `::${repoLink}` : ""))
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+  return `group_${seed || category}`;
+}
+
+export function inferGroupName(category: TaskCategory, customName?: string): string {
+  return customName ?? AUTO_GROUP_MAP[category] ?? "其他任务";
+}
+
+export function inferRepoLink(prompt: string): string | undefined {
+  const repoMatch = prompt.match(/(?:https?:\/\/)?(?:www\.)?(?:github\.com|gitlab\.com|gitee\.com)\/[\w.-]+\/[\w.-]+/);
+  return repoMatch ? repoMatch[0] : undefined;
+}
+
+export function extractChatTrace(snapshot: TaskSnapshot): ChatTraceRecord[] {
+  const { task, events, logs } = snapshot;
+  if (task.category !== "chat") return [];
+  const trace: ChatTraceRecord[] = [];
+
+  const userEvent = events.find((e) => e.type === "task.created");
+  if (userEvent) {
+    trace.push({
+      step: "用户请求",
+      type: "user_request",
+      message: task.prompt,
+      detail: userEvent.message,
+      timestamp: userEvent.createdAt,
+    });
+  }
+
+  const analysisEvents = events.filter((e) =>
+    ["triage.completed", "human.review.required", "task.blocked"].includes(e.type)
+  );
+  for (const ae of analysisEvents) {
+    trace.push({
+      step: ae.type === "triage.completed" ? "意图分析" : ae.type === "human.review.required" ? "人工审核" : "阻塞检测",
+      type: "analysis_decision",
+      message: ae.message,
+      detail: Object.keys(ae.payload).length > 0 ? JSON.stringify(ae.payload) : undefined,
+      timestamp: ae.createdAt,
+    });
+  }
+
+  const resultEvents = events.filter((e) =>
+    ["task.completed", "files.changed", "tests.passed", "runner.started"].includes(e.type)
+  );
+  if (resultEvents.length > 0) {
+    const re = resultEvents[resultEvents.length - 1];
+    trace.push({
+      step: re.type === "task.completed" ? "执行完成" : "执行结果",
+      type: "execution_result",
+      message: re.message,
+      detail: task.summary.length > 4 ? task.summary : undefined,
+      timestamp: re.createdAt,
+    });
+  }
+
+  if (logs.length > 0) {
+    const lastLog = logs[logs.length - 1];
+    trace.push({
+      step: "日志记录",
+      type: "execution_result",
+      message: lastLog.content,
+      timestamp: lastLog.createdAt,
+    });
+  }
+
+  return trace;
 }
 
 export function generateCodingReleaseNotes(snapshot: TaskSnapshot): string {
@@ -122,7 +218,7 @@ export function generateCodingReleaseNotes(snapshot: TaskSnapshot): string {
 
   const toolEvents = events.filter((e) => e.type === "opencode.tool");
   if (toolEvents.length > 0) {
-    const tools = [...new Set(toolEvents.map((e) => String(e.payload?.tool ?? "")))].filter(Boolean);
+    const tools = Array.from(new Set(toolEvents.map((e) => String(e.payload?.tool ?? "")))).filter(Boolean);
     if (tools.length > 0) {
       parts.push(`### 使用工具`);
       parts.push(tools.map((t) => `- \`${t}\``).join("\n"));

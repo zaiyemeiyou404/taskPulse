@@ -2,9 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Bot, Code2, Loader2, MessageSquare, PenLine, Play, Presentation, WandSparkles } from "lucide-react";
+import { Bot, Code2, Globe, Group, Loader2, Play, WandSparkles } from "lucide-react";
+import { AUTO_GROUP_MAP, TaskCategory } from "@/lib/task-pulse/types";
 import { categoryInfo } from "@/lib/task-pulse/utils";
-import { TaskCategory } from "@/lib/task-pulse/types";
 
 const runners = [
   { key: "opencode", label: "OpenCode", desc: "代码生成专用", icon: Code2 },
@@ -17,6 +17,8 @@ export function TaskLauncher() {
   const [prompt, setPrompt] = useState("");
   const [runner, setRunner] = useState<string>("opencode");
   const [category, setCategory] = useState<TaskCategory>("coding");
+  const [groupName, setGroupName] = useState("");
+  const [repoLink, setRepoLink] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +38,8 @@ export function TaskLauncher() {
           source: "控制台",
           mode: "live",
           cwd: "/home/ubuntu/task-pulse",
+          groupName: groupName || undefined,
+          repoLink: repoLink || undefined,
         }),
       });
       if (!response.ok) {
@@ -109,7 +113,7 @@ export function TaskLauncher() {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-white outline-none transition focus:border-cyan-300/25"
-            placeholder={`输入${categoryInfo[category].label}任务标题`}
+            placeholder={`输入${categoryInfo[category].label}任务标题（留空自动生成）`}
           />
         </label>
         <label className="grid gap-2 text-sm text-slate-300">
@@ -119,6 +123,33 @@ export function TaskLauncher() {
             onChange={(event) => setPrompt(event.target.value)}
             className="min-h-[120px] rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-white outline-none transition focus:border-cyan-300/25"
             placeholder={`描述 ${runner === "hermes" ? "Hermes" : "OpenCode"} 需要执行的内容`}
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <label className="grid gap-2 text-sm text-slate-300">
+          <span className="inline-flex items-center gap-1.5">
+            <Group className="h-3.5 w-3.5 text-cyan-200" />
+            大任务名称
+          </span>
+          <input
+            value={groupName}
+            onChange={(event) => setGroupName(event.target.value)}
+            className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-white outline-none transition focus:border-cyan-300/25"
+            placeholder={`留空自动归入「${AUTO_GROUP_MAP[category]}」`}
+          />
+        </label>
+        <label className="grid gap-2 text-sm text-slate-300">
+          <span className="inline-flex items-center gap-1.5">
+            <Globe className="h-3.5 w-3.5 text-cyan-200" />
+            仓库链接（coding 项目）
+          </span>
+          <input
+            value={repoLink}
+            onChange={(event) => setRepoLink(event.target.value)}
+            className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-white outline-none transition focus:border-cyan-300/25"
+            placeholder="https://github.com/user/repo"
           />
         </label>
       </div>

@@ -1,6 +1,34 @@
-export type TaskStatus = "queued" | "running" | "blocked" | "done" | "failed" | "stopped";
+export type TaskStatus = "queued" | "running" | "blocked" | "approval_required" | "done" | "failed" | "stopped";
+export const APPROVAL_KEYWORDS = [
+  "command required approval",
+  "permission requested:",
+  "approval requested",
+];
 
 export type TaskCategory = "chat" | "ppt" | "paper" | "coding";
+
+export type ChatTraceRecord = {
+  step: string;
+  type: "user_request" | "analysis_decision" | "execution_result";
+  message: string;
+  detail?: string;
+  timestamp?: string;
+};
+
+export type TaskGroupMeta = {
+  groupId: string;
+  groupName: string;
+  repoLink?: string;
+  summary?: string;
+  childCount?: number;
+};
+
+export const AUTO_GROUP_MAP: Record<TaskCategory, string> = {
+  chat: "日常聊天",
+  ppt: "PPT 生成",
+  paper: "论文产出",
+  coding: "项目开发",
+};
 
 export type TaskPhase =
   | "queued"
@@ -38,6 +66,9 @@ export type Task = {
   notificationCount: number;
   progressPercent: number;
   metadata: Record<string, unknown>;
+  groupId?: string;
+  repoLink?: string;
+  chatTrace?: ChatTraceRecord[];
 };
 
 export type TaskEvent = {
@@ -93,4 +124,15 @@ export type TaskSnapshot = {
   artifacts: TaskArtifact[];
   notifications: TaskNotification[];
   version: number;
+};
+
+export type TaskGroup = {
+  id: string;
+  name: string;
+  category: TaskCategory;
+  repoLink?: string;
+  summary: string;
+  childTaskIds: string[];
+  createdAt: string;
+  updatedAt: string;
 };

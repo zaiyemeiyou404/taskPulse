@@ -1,16 +1,17 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
-import { mkdirSync, existsSync, readFileSync, readdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, readdirSync, renameSync, writeFileSync, rmSync, unlinkSync } from "node:fs";
 import * as path from "node:path";
 import { type Readable } from "node:stream";
 import { INITIAL_TASKS } from "./mock-data";
-import { TaskArtifact, TaskCategory, TaskEvent, TaskLog, TaskNotification, TaskPhase, TaskSnapshot, TaskStatus } from "./types";
-import { inferTitle } from "./utils";
+import { Task, TaskArtifact, TaskCategory, TaskEvent, TaskGroup, TaskLog, TaskNotification, TaskPhase, TaskSnapshot, TaskStatus } from "./types";
+import { inferGroupId, inferGroupName, inferRepoLink, inferTitle } from "./utils";
 
 const TASKS = new Map<string, TaskSnapshot>();
 const versions = new Map<string, number>();
 const ACTIVE_RUNNERS = new Map<string, RunnerHandle>();
 const SIMULATION_TIMERS = new Map<string, NodeJS.Timeout[]>();
 const DELETED_IDS = new Set<string>();
+const GROUPS = new Map<string, TaskGroup>();
 let booted = false;
 let counter = 0;
 
@@ -20,8 +21,6 @@ const DEFAULT_CWD = "/home/ubuntu/task-pulse";
 const DATA_DIR = path.join(DEFAULT_CWD, ".task-pulse-data");
 const LIVE_RUNNER_SCRIPT = path.join(DEFAULT_CWD, "scripts/task-pulse-live-runner.js");
 const HERMES_RUNNER_SCRIPT = path.join(DEFAULT_CWD, "scripts/task-pulse-hermes-runner.js");
-const BLOCKED_MS = 2 * 60 * 1000;
-
 const TOMBSTONE_FILE = path.join(DEFAULT_CWD, ".task-pulse-data", ".deleted-task-ids.json");
 
 function loadDeletedIds(): Set<string> {
@@ -79,8 +78,12 @@ type CreateTaskInput = {
   source?: string;
   mode?: RunnerMode;
   cwd?: string;
+  groupId?: string;
+  groupName?: string;
+  repoLink?: string;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type OpenCodeJsonEvent = {
   type?: string;
   sessionID?: string;
@@ -167,7 +170,29 @@ function shouldPersistSnapshot(snapshot: TaskSnapshot | null | undefined) {
   return Boolean(snapshot?.task.id);
 }
 
+function normalizeSnapshotGrouping(snapshot: TaskSnapshot) {
+  const previousTaskGroupId = snapshot.task.groupId;
+  const previousMetaGroupId = typeof snapshot.task.metadata.groupId === "string" ? snapshot.task.metadata.groupId : undefined;
+  const previousRepoLink = snapshot.task.repoLink;
+  const previousMetaRepoLink = typeof snapshot.task.metadata.repoLink === "string" ? snapshot.task.metadata.repoLink : undefined;
+  const groupId = registerGroup(snapshot);
+  const repoLink = snapshot.task.repoLink || (typeof snapshot.task.metadata.repoLink === "string" ? snapshot.task.metadata.repoLink : undefined);
+
+  snapshot.task.groupId = groupId;
+  snapshot.task.metadata.groupId = groupId;
+  if (repoLink) {
+    snapshot.task.repoLink = repoLink;
+    snapshot.task.metadata.repoLink = repoLink;
+  }
+
+  return previousTaskGroupId !== snapshot.task.groupId
+    || previousMetaGroupId !== snapshot.task.metadata.groupId
+    || previousRepoLink !== snapshot.task.repoLink
+    || previousMetaRepoLink !== snapshot.task.metadata.repoLink;
+}
+
 function writeSnapshotFile(snapshot: TaskSnapshot) {
+  normalizeSnapshotGrouping(snapshot);
   ensureDataDir();
   const file = getTaskFile(snapshot.task.id);
   const tmp = `${file}.tmp`;
@@ -175,20 +200,72 @@ function writeSnapshotFile(snapshot: TaskSnapshot) {
   renameSync(tmp, file);
 }
 
+function registerGroup(snapshot: TaskSnapshot) {
+  const category = snapshot.task.category ?? "coding";
+  const repoLink = snapshot.task.repoLink || (typeof snapshot.task.metadata.repoLink === "string" ? snapshot.task.metadata.repoLink : undefined);
+  const groupName = typeof snapshot.task.metadata.groupName === "string"
+    ? snapshot.task.metadata.groupName
+    : inferGroupName(category);
+  const groupId = inferGroupId(category, groupName, repoLink);
+
+  snapshot.task.groupId = groupId;
+  if (!snapshot.task.metadata.groupName) {
+    snapshot.task.metadata.groupName = groupName;
+  }
+  if (repoLink && !snapshot.task.metadata.repoLink) {
+    snapshot.task.metadata.repoLink = repoLink;
+  }
+
+  const existing = GROUPS.get(groupId);
+
+  if (!existing) {
+    GROUPS.set(groupId, {
+      id: groupId,
+      name: groupName,
+      category,
+      repoLink: category === "coding" ? repoLink : undefined,
+      summary: `${groupName} — 项目级进度总览`,
+      childTaskIds: [snapshot.task.id],
+      createdAt: snapshot.task.startedAt,
+      updatedAt: snapshot.task.updatedAt,
+    });
+    return groupId;
+  }
+
+  existing.name = groupName || existing.name;
+  existing.updatedAt = snapshot.task.updatedAt;
+  existing.repoLink = existing.repoLink || (category === "coding" ? repoLink : undefined);
+  if (!existing.childTaskIds.includes(snapshot.task.id)) {
+    existing.childTaskIds.push(snapshot.task.id);
+  }
+
+  return groupId;
+}
+
 function readSnapshotFile(taskId: string) {
   const file = getTaskFile(taskId);
   if (!existsSync(file)) return null;
-  return JSON.parse(readFileSync(file, "utf8")) as TaskSnapshot;
+  const snapshot = JSON.parse(readFileSync(file, "utf8")) as TaskSnapshot;
+  const changed = normalizeSnapshotGrouping(snapshot);
+  if (changed) {
+    const tmp = `${file}.tmp`;
+    writeFileSync(tmp, JSON.stringify(snapshot, null, 2));
+    renameSync(tmp, file);
+  }
+  return snapshot;
 }
 
 function listLiveSnapshots() {
   ensureDataDir();
   return readdirSync(DATA_DIR)
-    .filter((name) => name.endsWith('.json') && !name.startsWith('.deleted-task-ids'))
+    .filter((name) => name.endsWith('.json') && !name.startsWith('.') && name !== '.deleted-task-ids.json')
     .map((name) => {
       try {
-        return JSON.parse(readFileSync(path.join(DATA_DIR, name), 'utf8')) as TaskSnapshot;
+        const taskId = name.replace(/\.json$/, "");
+        return readSnapshotFile(taskId);
       } catch {
+        const file = path.join(DATA_DIR, name);
+        try { unlinkSync(file); } catch {}
         return null;
       }
     })
@@ -329,143 +406,11 @@ function ensureTask(taskId: string) {
   return snapshot;
 }
 
-function scheduleBlockedWatch(taskId: string, child: OpenCodeChild) {
-  const watchdog = setInterval(() => {
-    const snapshot = TASKS.get(taskId);
-    const handle = ACTIVE_RUNNERS.get(taskId);
-    if (!snapshot || !handle) return;
-    if (snapshot.task.status === "stopped" || snapshot.task.status === "done" || snapshot.task.status === "failed") return;
-    const idle = Date.now() - handle.lastOutputAt;
-    if (idle > BLOCKED_MS && !handle.blockedNotified) {
-      handle.blockedNotified = true;
-      snapshot.task.needsHuman = true;
-      setStatus(taskId, "blocked", snapshot.task.phase, Math.max(snapshot.task.progressPercent, 65), "No fresh runner output for 2m", "Runner appears idle and may need attention.");
-      addEvent(taskId, "task.blocked", "warning", "Runner produced no output for over 2 minutes", { idleMs: idle });
-      addNotification(taskId, "task.blocked", "sent");
-    }
-  }, 15000);
-
-  ACTIVE_RUNNERS.set(taskId, {
-    process: child,
-    startedAt: Date.now(),
-    lastOutputAt: Date.now(),
-    watchdog,
-    blockedNotified: false,
-  });
-}
-
 function clearRunner(taskId: string) {
   const handle = ACTIVE_RUNNERS.get(taskId);
   if (!handle) return;
   clearInterval(handle.watchdog);
   ACTIVE_RUNNERS.delete(taskId);
-}
-
-function markRunnerActivity(taskId: string) {
-  const snapshot = TASKS.get(taskId);
-  const handle = ACTIVE_RUNNERS.get(taskId);
-  if (!snapshot || !handle) return;
-  handle.lastOutputAt = Date.now();
-  if (handle.blockedNotified && snapshot.task.status === "blocked") {
-    handle.blockedNotified = false;
-    snapshot.task.needsHuman = false;
-    setStatus(taskId, "running", snapshot.task.phase, Math.max(snapshot.task.progressPercent, 72), "Runner activity resumed", "Runner output resumed.");
-    addEvent(taskId, "task.unblocked", "success", "Runner output resumed", { resumedAt: new Date().toISOString() });
-  }
-}
-
-function mapTextToSignals(taskId: string, text: string) {
-  const normalized = text.toLowerCase();
-  markRunnerActivity(taskId);
-  addLog(taskId, "stdout", normalized.includes("error") ? "warning" : "info", text);
-
-  if (/test|pytest|vitest|npm test|pnpm test|cargo test/.test(normalized)) {
-    setStatus(taskId, "running", "testing", 82, text, text);
-    addEvent(taskId, "tests.started", "info", text, { source: "opencode-text" });
-    return;
-  }
-
-  if (/patch|write|implement|refactor|create|edit|modify/.test(normalized)) {
-    setStatus(taskId, "running", "coding", 48, text, text);
-    addEvent(taskId, "opencode.phase.changed", "info", text, { phase: "coding" });
-    return;
-  }
-
-  if (/done|completed|finished|summary/.test(normalized)) {
-    setStatus(taskId, "running", "summarizing", 92, text, text);
-    addEvent(taskId, "opencode.phase.changed", "success", text, { phase: "summarizing" });
-  }
-}
-
-function handleOpenCodeJsonEvent(taskId: string, event: OpenCodeJsonEvent) {
-  const type = event.type ?? event.part?.type;
-  const snapshot = ensureTask(taskId);
-  setMetadata(taskId, event.sessionID ? { sessionID: event.sessionID } : {});
-
-  if (type === "step_start" || type === "step-start") {
-    setStatus(taskId, "running", "coding", 18, "OpenCode session started", "OpenCode session started.");
-    addEvent(taskId, "opencode.started", "info", "OpenCode session started", { sessionID: event.sessionID, runner: OPENCODE_BIN });
-    addNotification(taskId, "task.started", "sent");
-    return;
-  }
-
-  if (type === "text" && event.part?.text) {
-    mapTextToSignals(taskId, event.part.text);
-    return;
-  }
-
-  if (type === "tool_use" && event.part?.tool) {
-    const tool = event.part.tool;
-    const toolStatus = event.part.state?.status ?? "started";
-    const level: TaskLog["level"] = tool === "invalid" ? "warning" : "info";
-    addLog(taskId, "system", level, `tool:${tool} status=${toolStatus}`);
-    addEvent(taskId, "opencode.tool", tool === "invalid" ? "warning" : "info", `OpenCode used ${tool}`, {
-      tool,
-      status: toolStatus,
-      callID: event.part.callID,
-    });
-    const progress = tool === "write" ? 88 : tool === "read" ? 34 : 62;
-    const phase: TaskPhase = tool === "write" ? "coding" : snapshot.task.phase === "queued" ? "triaging" : snapshot.task.phase;
-    setStatus(taskId, "running", phase, Math.max(snapshot.task.progressPercent, progress), `OpenCode using ${tool}`, `OpenCode using ${tool}`);
-    return;
-  }
-
-  if (type === "step_finish" || type === "step-finish") {
-    const tokens = event.part?.tokens ?? {};
-    const cost = event.part?.cost ?? 0;
-    setStatus(taskId, "done", "completed", 100, "Task completed successfully", snapshot.task.summary || "Task completed successfully.");
-    addEvent(taskId, "task.completed", "success", "OpenCode run completed", { cost, tokens, reason: event.part?.reason ?? "stop" });
-    addLog(taskId, "system", "success", `OpenCode finished. tokens=${tokens.total ?? 0} cost=${cost}`);
-    addArtifact(taskId, `${taskId}-summary.json`, "json", `/api/tasks/${taskId}`);
-    addNotification(taskId, "task.completed", "sent");
-  }
-}
-
-function connectLineBuffer(taskId: string, stream: "stdout" | "stderr", onLine: (line: string) => void) {
-  let buffer = "";
-
-  const pushLine = (line: string) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-    if (stream === "stderr") {
-      markRunnerActivity(taskId);
-      addLog(taskId, "stderr", /error|failed/i.test(trimmed) ? "error" : "warning", trimmed);
-    }
-    onLine(trimmed);
-  };
-
-  return {
-    onData(chunk: Buffer | string) {
-      buffer += chunk.toString();
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop() ?? "";
-      for (const raw of lines) pushLine(raw);
-    },
-    flush() {
-      if (buffer.trim()) pushLine(buffer);
-      buffer = "";
-    },
-  };
 }
 
 function startLiveRunner(taskId: string) {
@@ -537,11 +482,24 @@ export function ensureStoreBooted() {
     if (DELETED_IDS.has(snapshot.task.id)) return;
     const copy = deepClone(snapshot);
     TASKS.set(copy.task.id, copy);
-    versions.set(copy.task.id, copy.version);
+    versions.set(copy.task.id, copy.version ?? 0);
+    try {
+      registerGroup(copy);
+    } catch {
+      // skip group registration for this task if it fails
+    }
   });
-  if (!DELETED_IDS.has("task_demo_live")) {
-    startSimulation("task_demo_live");
-  }
+  const persisted = listLiveSnapshots();
+  persisted.forEach((snapshot) => {
+    if (DELETED_IDS.has(snapshot.task.id)) return;
+    TASKS.set(snapshot.task.id, snapshot);
+    versions.set(snapshot.task.id, snapshot.version ?? 0);
+    try {
+      registerGroup(snapshot);
+    } catch {
+      // skip group registration for this task if it fails
+    }
+  });
 }
 
 export function listTasks() {
@@ -582,6 +540,30 @@ export function createTask(input: CreateTaskInput) {
   const now = new Date().toISOString();
   const mode = input.mode ?? (input.runner === "opencode" ? "live" : "demo");
   const title = input.title || inferTitle(input.prompt, input.category ?? "coding", input.runner ?? "opencode");
+  const category = input.category ?? "coding";
+
+  const repoLink = input.repoLink || inferRepoLink(input.prompt);
+  const groupName = input.groupName || inferGroupName(category);
+  const groupId = inferGroupId(category, groupName, repoLink);
+
+  if (!GROUPS.has(groupId)) {
+    GROUPS.set(groupId, {
+      id: groupId,
+      name: groupName,
+      category,
+      repoLink: category === "coding" ? repoLink : undefined,
+      summary: `${groupName} — 项目级进度总览`,
+      childTaskIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  const group = GROUPS.get(groupId)!;
+  group.childTaskIds.push(id);
+  group.updatedAt = now;
+  group.repoLink = group.repoLink || (category === "coding" ? repoLink : undefined);
+
   const snapshot: TaskSnapshot = {
     task: {
       id,
@@ -589,7 +571,7 @@ export function createTask(input: CreateTaskInput) {
       prompt: input.prompt,
       status: "queued",
       phase: "queued",
-      category: input.category ?? "coding",
+      category,
       runner: input.runner ?? "opencode",
       model: input.model ?? DEFAULT_MODEL,
       source: input.source ?? "manual",
@@ -604,7 +586,9 @@ export function createTask(input: CreateTaskInput) {
       logCount: 0,
       notificationCount: 0,
       progressPercent: 0,
-      metadata: { mode, cwd: input.cwd ?? DEFAULT_CWD, runnerMode: mode },
+      metadata: { mode, cwd: input.cwd ?? DEFAULT_CWD, runnerMode: mode, groupId, groupName, repoLink },
+      groupId,
+      repoLink,
     },
     events: [],
     logs: [],
@@ -614,7 +598,7 @@ export function createTask(input: CreateTaskInput) {
   };
   TASKS.set(id, snapshot);
   versions.set(id, 0);
-  addEvent(id, "task.created", "info", "Task created", { source: snapshot.task.source, mode });
+  addEvent(id, "task.created", "info", "Task created", { source: snapshot.task.source, mode, groupId, groupName });
   writeSnapshotFile(snapshot);
   startTaskExecution(id);
   return getTaskSnapshot(id);
@@ -624,15 +608,17 @@ export function stopTask(taskId: string) {
   ensureStoreBooted();
   refreshDeletedIds();
   clearSimulation(taskId);
+  clearRunner(taskId);
   const liveSnapshot = readSnapshotFile(taskId);
   if (liveSnapshot) {
     const workerPid = typeof liveSnapshot.task.metadata.workerPid === "number" ? liveSnapshot.task.metadata.workerPid : null;
-    if (workerPid) {
-      try { process.kill(workerPid, "SIGTERM"); } catch {}
+    const pid = typeof liveSnapshot.task.metadata.pid === "number" ? liveSnapshot.task.metadata.pid : null;
+    const pids = [workerPid, pid].filter((p): p is number => p !== null);
+    for (const p of pids) {
+      try { process.kill(p, "SIGTERM"); } catch {}
     }
     liveSnapshot.task.needsHuman = false;
     liveSnapshot.task.status = "stopped";
-    liveSnapshot.task.phase = liveSnapshot.task.phase;
     liveSnapshot.task.progressText = "Stopped by operator";
     liveSnapshot.task.summary = "Stopped by operator";
     liveSnapshot.task.endedAt = new Date().toISOString();
@@ -642,17 +628,40 @@ export function stopTask(taskId: string) {
     writeSnapshotFile(liveSnapshot);
     return deepClone(liveSnapshot);
   }
-  const runner = ACTIVE_RUNNERS.get(taskId);
-  if (runner) {
-    runner.process.kill("SIGTERM");
-    clearRunner(taskId);
-  }
   const snapshot = TASKS.get(taskId);
   if (!snapshot) return null;
   snapshot.task.needsHuman = false;
   setStatus(taskId, "stopped", snapshot.task.phase, snapshot.task.progressPercent, "Stopped by operator", "Stopped by operator");
   addEvent(taskId, "task.stopped", "warning", "Task stopped by operator");
   addNotification(taskId, "task.stopped", "sent");
+  return getTaskSnapshot(taskId);
+}
+
+export function approveTask(taskId: string) {
+  ensureStoreBooted();
+  refreshDeletedIds();
+  const liveSnapshot = readSnapshotFile(taskId);
+  if (liveSnapshot) {
+    liveSnapshot.task.status = "running";
+    liveSnapshot.task.needsHuman = false;
+    liveSnapshot.task.progressText = "Approval granted, resuming...";
+    liveSnapshot.task.summary = "Approval was granted by operator.";
+    const idx = liveSnapshot.events.findIndex((e) => e.type === "human.approval.required");
+    if (idx >= 0) liveSnapshot.events.splice(idx, 1);
+    addEvent(taskId, "task.approved", "success", "Operator approved command/request", { approvedAt: new Date().toISOString() });
+    mark(taskId);
+    writeSnapshotFile(liveSnapshot);
+    return deepClone(liveSnapshot);
+  }
+  const snapshot = TASKS.get(taskId);
+  if (!snapshot) return null;
+  snapshot.task.status = "running";
+  snapshot.task.needsHuman = false;
+  snapshot.task.progressText = "Approval granted, resuming...";
+  snapshot.task.summary = "Approval was granted by operator.";
+  const idx = snapshot.events.findIndex((e) => e.type === "human.approval.required");
+  if (idx >= 0) snapshot.events.splice(idx, 1);
+  addEvent(taskId, "task.approved", "success", "Operator approved command/request", { approvedAt: new Date().toISOString() });
   return getTaskSnapshot(taskId);
 }
 
@@ -685,8 +694,7 @@ export function deleteTask(taskId: string): boolean {
     if (existsSync(liveFile)) {
       const workerLog = path.join(DATA_DIR, `${taskId}.worker.log`);
       if (existsSync(workerLog)) {
-        try { renameSync(workerLog, `${workerLog}.deleted`); } catch {}
-        try { renameSync(workerLog, `/tmp/${taskId}.worker.log`); } catch {}
+        try { unlinkSync(workerLog); } catch {}
       }
       rmSync(liveFile);
     }
@@ -695,15 +703,90 @@ export function deleteTask(taskId: string): boolean {
   return true;
 }
 
+export function listGroups(): TaskGroup[] {
+  ensureStoreBooted();
+  refreshDeletedIds();
+  const existingTaskIds = new Set(
+    Array.from(TASKS.keys()).concat(listLiveSnapshots().map((snapshot) => snapshot.task.id))
+  );
+
+  const canonicalGroups = new Map<string, TaskGroup>();
+
+  for (const group of Array.from(GROUPS.values())) {
+    const childTaskIds = group.childTaskIds.filter((tid) => existingTaskIds.has(tid) && !DELETED_IDS.has(tid));
+    if (childTaskIds.length === 0) continue;
+
+    const dedupeKey = `${group.category}::${group.name}::${group.repoLink ?? ""}`;
+    const existing = canonicalGroups.get(dedupeKey);
+
+    if (!existing) {
+      canonicalGroups.set(dedupeKey, {
+        ...group,
+        childTaskIds,
+        summary: `${group.name} — ${childTaskIds.length} 个子任务`,
+      });
+      continue;
+    }
+
+    existing.childTaskIds = Array.from(new Set(existing.childTaskIds.concat(childTaskIds)));
+    existing.updatedAt = existing.updatedAt > group.updatedAt ? existing.updatedAt : group.updatedAt;
+    existing.repoLink = existing.repoLink || group.repoLink;
+    existing.summary = `${existing.name} — ${existing.childTaskIds.length} 个子任务`;
+  }
+
+  const groups = Array.from(canonicalGroups.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  for (const group of groups) {
+    for (const tid of group.childTaskIds) {
+      const snap = TASKS.get(tid);
+      if (snap && snap.task.groupId !== group.id) {
+        snap.task.groupId = group.id;
+      }
+    }
+  }
+
+  return groups;
+}
+
+export function getGroupWithTasks(groupId: string): { group: TaskGroup; tasks: Task[] } | null {
+  ensureStoreBooted();
+  refreshDeletedIds();
+
+  let group: TaskGroup | undefined = Array.from(GROUPS.values()).find((g) => g.id === groupId);
+  if (!group) {
+    const allGroups = listGroups();
+    group = allGroups.find((g) => g.id === groupId);
+    if (!group) return null;
+  }
+
+  const tasks = group.childTaskIds
+    .map((tid) => {
+      const snap = TASKS.get(tid) || readSnapshotFile(tid);
+      return snap && !DELETED_IDS.has(tid) ? snap.task : null;
+    })
+    .filter((t): t is Task => t !== null);
+  return {
+    group: { ...group, childTaskIds: tasks.map((t) => t.id) },
+    tasks,
+  };
+}
+
 export function retryTask(taskId: string) {
   ensureStoreBooted();
   refreshDeletedIds();
+  clearSimulation(taskId);
+  clearRunner(taskId);
+
   const liveSnapshot = readSnapshotFile(taskId);
   if (liveSnapshot) {
     const workerPid = typeof liveSnapshot.task.metadata.workerPid === "number" ? liveSnapshot.task.metadata.workerPid : null;
     if (workerPid) {
       try { process.kill(workerPid, "SIGTERM"); } catch {}
     }
+    // Clean up old worker log
+    const workerLog = path.join(DATA_DIR, `${taskId}.worker.log`);
+    try { if (existsSync(workerLog)) unlinkSync(workerLog); } catch {}
+
     liveSnapshot.events = [];
     liveSnapshot.logs = [];
     liveSnapshot.artifacts = [];

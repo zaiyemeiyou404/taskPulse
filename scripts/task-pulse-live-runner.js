@@ -14,6 +14,7 @@ const ROOT = process.env.TASK_PULSE_ROOT || '/home/ubuntu/task-pulse';
 const DATA_DIR = path.join(ROOT, '.task-pulse-data');
 const FILE = path.join(DATA_DIR, `${taskId}.json`);
 const OPENCODE_BIN = process.env.OPENCODE_BIN || '/home/ubuntu/.hermes/node/bin/opencode';
+const APPROVAL_KEYWORDS = ['command required approval', 'permission requested:', 'approval requested'];
 const HERMES_ENV_FILE = path.join('/home/ubuntu', '.hermes', '.env');
 const OPENCODE_ENV_KEYS = [
   'HOME',
@@ -106,7 +107,7 @@ function setStatus(snapshot, status, phase, progressPercent, progressText, summa
   snapshot.task.progressPercent = progressPercent;
   snapshot.task.progressText = progressText;
   if (summary) snapshot.task.summary = summary;
-  snapshot.task.needsHuman = status === 'blocked';
+  snapshot.task.needsHuman = status === 'blocked' || status === 'approval_required';
   if (['done','failed','stopped'].includes(status)) snapshot.task.endedAt = new Date().toISOString();
 }
 function persist(mutator) {
@@ -155,12 +156,20 @@ const watchdog = setInterval(() => {
 
 function markOutput() {
   lastOutputAt = Date.now();
-  if (!blockedNotified) return;
-  blockedNotified = false;
-  persist((snapshot) => {
-    setStatus(snapshot, 'running', snapshot.task.phase === 'failed' ? 'coding' : snapshot.task.phase, Math.max(snapshot.task.progressPercent, 72), 'Runner activity resumed', 'Runner output resumed.');
-    addEvent(snapshot, 'task.unblocked', 'success', 'Runner output resumed');
-  });
+  if (blockedNotified) {
+    blockedNotified = false;
+    persist((snapshot) => {
+      setStatus(snapshot, 'running', snapshot.task.phase === 'failed' ? 'coding' : snapshot.task.phase, Math.max(snapshot.task.progressPercent, 72), 'Runner activity resumed', 'Runner output resumed.');
+      addEvent(snapshot, 'task.unblocked', 'success', 'Runner output resumed');
+    });
+  } else {
+    persist((snapshot) => {
+      if (snapshot.task.status === 'approval_required') {
+        setStatus(snapshot, 'running', snapshot.task.phase, Math.max(snapshot.task.progressPercent, 72), 'Runner activity resumed', 'Runner output resumed.');
+        addEvent(snapshot, 'task.unblocked', 'success', 'Runner output resumed after approval');
+      }
+    });
+  }
 }
 
 function handleEvent(event) {
@@ -193,6 +202,10 @@ function handleEvent(event) {
       } else if (/patch|write|implement|refactor|create|edit|modify/.test(lower)) {
         setStatus(snapshot, 'running', 'coding', 48, text, text);
         addEvent(snapshot, 'opencode.phase.changed', 'info', text, { phase: 'coding' });
+      } else if (APPROVAL_KEYWORDS.some((kw) => lower.includes(kw))) {
+        setStatus(snapshot, 'approval_required', 'waiting_review', snapshot.task.progressPercent, '等待命令同意/权限批准', '等待人工同意某条命令/权限请求');
+        addEvent(snapshot, 'human.approval.required', 'warning', '需要人工审批：命令/权限请求', { text });
+        addNotification(snapshot, 'human.approval.required', 'sent');
       } else if (/done|completed|finished|summary/.test(lower)) {
         setStatus(snapshot, 'running', 'summarizing', 92, text, text);
         addEvent(snapshot, 'opencode.phase.changed', 'success', text, { phase: 'summarizing' });
@@ -200,7 +213,7 @@ function handleEvent(event) {
       return;
     }
     if (type === 'step_finish' || type === 'step-finish') {
-      if ((event.part?.reason || 'stop') !== 'stop') return;
+      if (event.part?.reason && event.part.reason !== 'stop' && event.part.reason !== 'done') return;
       const tokens = event.part?.tokens || {};
       const cost = event.part?.cost || 0;
       setStatus(snapshot, 'done', 'completed', 100, 'Task completed successfully', snapshot.task.summary || 'Task completed successfully.');
@@ -234,6 +247,13 @@ function handleLine(raw, streamName) {
     persist((snapshot) => {
       addLog(snapshot, 'stderr', /error|failed/i.test(line) ? 'error' : 'warning', line);
       if (/auth|api key|credential/i.test(line)) addEvent(snapshot, 'opencode.error', 'error', line, { channel: 'stderr' });
+      const lower = line.toLowerCase();
+      if (APPROVAL_KEYWORDS.some((kw) => lower.includes(kw))) {
+        setStatus(snapshot, 'approval_required', 'waiting_review', snapshot.task.progressPercent, '正在等待命令/权限审批', '等待人工同意某条命令/权限请求');
+        snapshot.task.needsHuman = true;
+        addEvent(snapshot, 'human.approval.required', 'warning', '需要人工审批：命令/权限请求', { text: line, channel: 'stderr' });
+        addNotification(snapshot, 'human.approval.required', 'sent');
+      }
     });
     return;
   }

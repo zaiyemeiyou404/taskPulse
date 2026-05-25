@@ -1,12 +1,23 @@
-import { TaskArtifact, TaskEvent, TaskLog, TaskNotification, TaskSnapshot } from "./types";
+import { AUTO_GROUP_MAP, TaskArtifact, TaskEvent, TaskLog, TaskNotification, TaskSnapshot } from "./types";
 
 const now = Date.now();
+
+function mockGroupId(category: "coding" | "chat", repoLink?: string): string {
+  const name = AUTO_GROUP_MAP[category];
+  const seed = ((name || category) + (repoLink ? `::${repoLink}` : ""))
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return `group_${seed || category}`;
+}
 
 export const INITIAL_TASKS: TaskSnapshot[] = [
   {
     task: {
       id: "task_demo_live",
-      title: "Task Pulse 实时监控面板",
+      title: "实时监控面板与 SSE 事件流",
       prompt: "构建一个带有 SSE 实时事件流和日志面板的暗色主题任务监控仪表盘。",
       status: "running",
       phase: "coding",
@@ -25,7 +36,9 @@ export const INITIAL_TASKS: TaskSnapshot[] = [
       logCount: 6,
       notificationCount: 1,
       progressPercent: 46,
-      metadata: { branch: "task-pulse/live-demo", host: "hermes-server" },
+      metadata: { branch: "task-pulse/live-demo", host: "hermes-server", groupName: AUTO_GROUP_MAP.coding, repoLink: "https://github.com/user/task-pulse" },
+      groupId: mockGroupId("coding", "https://github.com/user/task-pulse"),
+      repoLink: "https://github.com/user/task-pulse",
     },
     events: [
       evt("task_demo_live", "task.created", "info", "任务已从微信请求创建", { source: "微信" }, now - 1000 * 60 * 11),
@@ -72,7 +85,15 @@ export const INITIAL_TASKS: TaskSnapshot[] = [
       logCount: 3,
       notificationCount: 2,
       progressPercent: 74,
-      metadata: { owner: "Hermes", environment: "prod" },
+      metadata: { owner: "Hermes", environment: "prod", groupName: AUTO_GROUP_MAP.chat },
+      groupId: mockGroupId("chat"),
+      chatTrace: [
+        { step: "用户请求", type: "user_request", message: "集成生产级微信消息发送器，含重试策略和送达回执。", detail: "任务已从 n8n webhook 创建", timestamp: new Date(now - 1000 * 60 * 38).toISOString() },
+        { step: "意图分析", type: "analysis_decision", message: "Hermes 工作流已启动，准备处理微信通知器集成", detail: '{"runner":"hermes","confidence":0.85}', timestamp: new Date(now - 1000 * 60 * 37).toISOString() },
+        { step: "人工审核", type: "analysis_decision", message: "需要人工确认回调目标", detail: '{"target":"微信","reason":"缺少生产环境回调目标"}', timestamp: new Date(now - 1000 * 60 * 4).toISOString() },
+        { step: "阻塞检测", type: "analysis_decision", message: "等待审核超时，任务已标记为阻塞", timestamp: new Date(now - 1000 * 60 * 2).toISOString() },
+        { step: "执行结果", type: "execution_result", message: "等待人工确认回调目标与凭据。", detail: "任务暂停，需要操作员介入", timestamp: new Date(now - 1000 * 60 * 1).toISOString() },
+      ],
     },
     events: [
       evt("task_blocked_approval", "task.created", "info", "任务已从 n8n webhook 创建", {}, now - 1000 * 60 * 38),
@@ -114,7 +135,9 @@ export const INITIAL_TASKS: TaskSnapshot[] = [
       logCount: 4,
       notificationCount: 2,
       progressPercent: 100,
-      metadata: { commit: "feat/kpi-cards" },
+      metadata: { commit: "feat/kpi-cards", groupName: AUTO_GROUP_MAP.coding, repoLink: "https://github.com/user/task-pulse" },
+      groupId: mockGroupId("coding", "https://github.com/user/task-pulse"),
+      repoLink: "https://github.com/user/task-pulse",
     },
     events: [
       evt("task_done_metrics", "task.created", "info", "手动创建任务", {}, now - 1000 * 60 * 93),
@@ -133,6 +156,50 @@ export const INITIAL_TASKS: TaskSnapshot[] = [
     notifications: [
       notification("task_done_metrics", "task.started", "sent", now - 1000 * 60 * 92),
       notification("task_done_metrics", "task.completed", "sent", now - 1000 * 60 * 67),
+    ],
+    version: 1,
+  },
+  {
+    task: {
+      id: "task_approval_cmd",
+      title: "审批测试：Git push 到远程仓库",
+      prompt: "帮我将本地代码 push 到远程仓库。",
+      status: "approval_required",
+      phase: "waiting_review",
+      category: "coding",
+      runner: "opencode",
+      model: "deepseek/deepseek-chat",
+      source: "手动",
+      summary: "等待人工同意 git push 命令",
+      progressText: "等待命令同意/权限批准",
+      needsHuman: true,
+      startedAt: new Date(now - 1000 * 60 * 5).toISOString(),
+      updatedAt: new Date(now - 1000 * 30).toISOString(),
+      endedAt: null,
+      durationMs: 1000 * 60 * 5,
+      eventCount: 4,
+      logCount: 3,
+      notificationCount: 2,
+      progressPercent: 62,
+      metadata: { groupName: AUTO_GROUP_MAP.coding, repoLink: "https://github.com/user/task-pulse" },
+      groupId: mockGroupId("coding", "https://github.com/user/task-pulse"),
+      repoLink: "https://github.com/user/task-pulse",
+    },
+    events: [
+      evt("task_approval_cmd", "task.created", "info", "手动创建任务", {}, now - 1000 * 60 * 5),
+      evt("task_approval_cmd", "runner.started", "info", "OpenCode 已启动", {}, now - 1000 * 60 * 4),
+      evt("task_approval_cmd", "opencode.phase.changed", "info", "Agent 进入编码阶段", { phase: "coding" }, now - 1000 * 60 * 2),
+      evt("task_approval_cmd", "human.approval.required", "warning", "需要人工审批：命令/权限请求", { text: "Command required approval: git push origin main" }, now - 1000 * 30),
+    ],
+    logs: [
+      log("task_approval_cmd", "stdout", "info", "正在分析仓库状态", now - 1000 * 60 * 4),
+      log("task_approval_cmd", "stdout", "info", "git add 已完成，准备提交", now - 1000 * 60 * 2),
+      log("task_approval_cmd", "stdout", "warning", "Command required approval: git push origin main", now - 1000 * 30),
+    ],
+    artifacts: [],
+    notifications: [
+      notification("task_approval_cmd", "task.started", "sent", now - 1000 * 60 * 4),
+      notification("task_approval_cmd", "human.approval.required", "sent", now - 1000 * 30),
     ],
     version: 1,
   },

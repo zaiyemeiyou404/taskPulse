@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, Bell, Bot, Clock3, Copy, ExternalLink, FileDown, FileJson2, FolderGit2, PauseCircle, PlayCircle, Sparkles, SquareTerminal, Trash2 } from "lucide-react";
+import { Activity, Bell, Bot, Check, Clock3, Copy, ExternalLink, FileDown, FileJson2, FolderGit2, PauseCircle, PlayCircle, Sparkles, SquareTerminal, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { TaskFlowPipeline } from "@/components/task-pulse/flow-pipeline";
 import { TaskSnapshot } from "@/lib/task-pulse/types";
-import { artifactActionExternal, artifactActionHref, artifactActionLabel, artifactDisplayPath, artifactFileDownloadUrl, cn, formatDateTime, formatDuration, formatRelative, generateCodingReleaseNotes, getTaskQuickLinks, phaseLabel, summarizeTaskActions } from "@/lib/task-pulse/utils";
+import { artifactActionExternal, artifactActionHref, artifactActionLabel, artifactDisplayPath, artifactFileDownloadUrl, cn, extractChatTrace, formatDateTime, formatDuration, formatRelative, generateCodingReleaseNotes, getTaskQuickLinks, phaseLabel, summarizeTaskActions } from "@/lib/task-pulse/utils";
 
 const phaseOrder = ["queued", "triaging", "accepted", "booting_runner", "coding", "testing", "summarizing", "waiting_review", "completed", "failed"] as const;
 const tabs = ["概览", "产物", "文件", "通知", "原始JSON"] as const;
@@ -16,6 +16,7 @@ const statusLabels: Record<string, string> = {
   queued: "排队中",
   running: "运行中",
   blocked: "已阻塞",
+  approval_required: "待命令同意",
   done: "已完成",
   failed: "已失败",
   stopped: "已停止",
@@ -99,6 +100,13 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
 
         <div className="mt-6 flex flex-wrap gap-3">
           <ActionButton icon={Copy} label="复制ID" onClick={() => navigator.clipboard.writeText(snapshot.task.id)} />
+          {snapshot.task.status === "approval_required" && (
+            <ActionButton icon={Check} label="批准命令" onClick={async () => {
+              await fetch(`/api/tasks/${snapshot.task.id}/approve`, { method: "POST" });
+              const res = await fetch(`/api/tasks/${snapshot.task.id}`);
+              setSnapshot(await res.json() as TaskSnapshot);
+            }} />
+          )}
           <ActionButton icon={PauseCircle} label="停止" onClick={() => postAction("stop")} />
           <ActionButton icon={PlayCircle} label="重试" onClick={() => postAction("retry")} />
           <ActionButton icon={Trash2} label="删除任务" onClick={async () => {
@@ -157,6 +165,8 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
               <p className="mt-2 text-sm text-slate-300">已停止，被人为中断。</p>
             ) : snapshot.task.status === "blocked" ? (
               <p className="mt-2 text-sm text-amber-300">卡住了，需要你来处理。</p>
+            ) : snapshot.task.status === "approval_required" ? (
+              <p className="mt-2 text-sm text-amber-300">正在等待你同意命令/权限请求。</p>
             ) : snapshot.task.status === "running" ? (
               <p className="mt-2 text-sm text-cyan-200">正在执行中，尚未完成。</p>
             ) : (
@@ -165,7 +175,9 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
           </div>
           <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
             <div className="text-xs uppercase tracking-[0.16em] text-slate-500">要不要我处理？</div>
-            {snapshot.task.needsHuman ? (
+            {snapshot.task.status === "approval_required" ? (
+              <p className="mt-2 text-sm text-amber-300">需要你批准或拒绝命令/权限请求，请查看日志。</p>
+            ) : snapshot.task.needsHuman ? (
               <p className="mt-2 text-sm text-amber-300">需要你关注，请查看日志并决定下一步操作。</p>
             ) : (
               <p className="mt-2 text-sm text-emerald-300">不需要，任务正在自动执行中。</p>
@@ -187,6 +199,51 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
             <h2 className="text-lg font-semibold text-emerald-200">功能更新</h2>
             <p className="mt-1 text-sm text-slate-400">这次改了什么 — 类似 GitHub Release Notes 的变更摘要。</p>
             <MarkdownPanel markdown={notes} className="mt-4 border-emerald-300/10 bg-black/20 text-slate-200" />
+          </section>
+        );
+      })()}
+
+      {/* ---- 聊天处理记录（chat 任务专属） ---- */}
+      {snapshot.task.category === "chat" && (() => {
+        const chatTrace = snapshot.task.chatTrace ?? extractChatTrace(snapshot);
+        if (chatTrace.length === 0) return null;
+        const traceIcons: Record<string, string> = {
+          user_request: "📩",
+          analysis_decision: "🧠",
+          execution_result: "✅",
+        };
+        const traceColors: Record<string, string> = {
+          user_request: "border-cyan-300/20 bg-cyan-400/8",
+          analysis_decision: "border-amber-300/20 bg-amber-400/8",
+          execution_result: "border-emerald-300/20 bg-emerald-400/8",
+        };
+        const traceLabel: Record<string, string> = {
+          user_request: "用户请求",
+          analysis_decision: "分析/决策",
+          execution_result: "执行/结果",
+        };
+        return (
+          <section className="rounded-[26px] border border-violet-300/15 bg-violet-400/5 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+            <h2 className="text-lg font-semibold text-violet-200">💬 聊天处理记录</h2>
+            <p className="mt-1 text-sm text-slate-400">从请求到回复的完整处理链路。</p>
+            <div className="mt-4 space-y-3">
+              {chatTrace.map((rec, i) => (
+                <div key={i} className={cn("rounded-2xl border p-4", traceColors[rec.type] ?? "border-white/10 bg-black/10")}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span>{traceIcons[rec.type] ?? "📋"}</span>
+                      <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[11px] uppercase tracking-wider text-slate-400">{traceLabel[rec.type] ?? rec.type}</span>
+                      <span className="font-medium text-white">{rec.step}</span>
+                    </div>
+                    {rec.timestamp && <span className="text-xs text-slate-500">{formatRelative(rec.timestamp)}</span>}
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-slate-200">{rec.message}</p>
+                  {rec.detail && (
+                    <pre className="mt-2 overflow-x-auto rounded-xl border border-white/6 bg-[#090C12] p-3 text-xs text-slate-400">{rec.detail}</pre>
+                  )}
+                </div>
+              ))}
+            </div>
           </section>
         );
       })()}
@@ -232,25 +289,12 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
               <h2 className="text-lg font-semibold text-white">事件流</h2>
               <p className="text-sm text-slate-400">Agent 正在执行的语义化时间线。</p>
             </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">{snapshot.events.length} 个事件</div>
+            <div className="flex items-center gap-2">
+              <EventStreamNewBadge snapshot={snapshot} />
+              <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">{snapshot.events.length} 个事件</div>
+            </div>
           </div>
-          <div className="space-y-3">
-            {snapshot.events.map((event) => (
-              <div key={event.id} className="rounded-2xl border border-white/8 bg-black/15 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className={cn("h-2.5 w-2.5 rounded-full", levelDot(event.level))} />
-                      <span className="font-medium text-white">{event.message}</span>
-                    </div>
-                    <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{event.type}</div>
-                  </div>
-                  <div className="text-xs text-slate-500">{formatRelative(event.createdAt)}</div>
-                </div>
-                <pre className="mt-3 overflow-x-auto rounded-xl border border-white/6 bg-[#090C12] p-3 text-xs text-slate-400">{JSON.stringify(event.payload, null, 2)}</pre>
-              </div>
-            ))}
-          </div>
+          <EventStreamList snapshot={snapshot} />
         </div>
 
         <div className="rounded-[26px] border border-white/10 bg-white/5 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
@@ -382,6 +426,7 @@ function StatusPill({ status }: { status: string }) {
     queued: "bg-slate-500/15 text-slate-200 border-slate-300/10",
     running: "bg-cyan-400/15 text-cyan-200 border-cyan-300/10",
     blocked: "bg-amber-400/15 text-amber-200 border-amber-300/10",
+    approval_required: "bg-violet-400/15 text-violet-200 border-violet-300/10",
     done: "bg-emerald-400/15 text-emerald-200 border-emerald-300/10",
     failed: "bg-rose-400/15 text-rose-200 border-rose-300/10",
     stopped: "bg-slate-500/15 text-slate-200 border-slate-300/10",
@@ -402,6 +447,7 @@ function MarkdownPanel({ markdown, className }: { markdown: string; className?: 
     <div className={cn("rounded-2xl border p-5", className)}>
       <div className="space-y-3 text-sm leading-7 text-slate-200">
         <ReactMarkdown
+          /* eslint-disable @typescript-eslint/no-unused-vars */
           components={{
             h1: ({ node, ...props }) => <h1 className="text-xl font-semibold text-white" {...props} />,
             h2: ({ node, ...props }) => <h2 className="text-lg font-semibold text-white" {...props} />,
@@ -439,6 +485,57 @@ function InfoCard({ icon: Icon, title, text }: { icon: React.ComponentType<{ cla
 
 function EmptyState({ label }: { label: string }) {
   return <div className="rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-500">{label}</div>;
+}
+
+function EventStreamNewBadge({ snapshot }: { snapshot: TaskSnapshot }) {
+  const prevRef = useRef(snapshot.events.length);
+  const [newCount, setNewCount] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    const prev = prevRef.current;
+    if (snapshot.events.length > prev) {
+      const diff = snapshot.events.length - prev;
+      setNewCount((c) => c + diff);
+      setDismissed(false);
+    }
+    prevRef.current = snapshot.events.length;
+  }, [snapshot.events.length]);
+
+  if (newCount <= 0 || dismissed) return null;
+  return (
+    <button
+      onClick={() => { setDismissed(true); setNewCount(0); }}
+      className="inline-flex items-center gap-1 rounded-full border border-amber-300/20 bg-amber-400/15 px-2.5 py-1 text-xs text-amber-200 animate-pulse hover:bg-amber-400/25 transition"
+      title="点击忽略"
+    >
+      +{newCount} 新事件
+    </button>
+  );
+}
+
+function EventStreamList({ snapshot }: { snapshot: TaskSnapshot }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <div ref={listRef} className="space-y-3">
+      {snapshot.events.map((event) => (
+        <div key={event.id} className="rounded-2xl border border-white/8 bg-black/15 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={cn("h-2.5 w-2.5 rounded-full", levelDot(event.level))} />
+                <span className="font-medium text-white">{event.message}</span>
+              </div>
+              <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{event.type}</div>
+            </div>
+            <div className="text-xs text-slate-500">{formatRelative(event.createdAt)}</div>
+          </div>
+          <pre className="mt-3 overflow-x-auto rounded-xl border border-white/6 bg-[#090C12] p-3 text-xs text-slate-400">{JSON.stringify(event.payload, null, 2)}</pre>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function levelDot(level: string) {

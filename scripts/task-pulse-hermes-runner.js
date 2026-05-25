@@ -66,6 +66,7 @@ function addNotification(snapshot, eventType, status) {
     payload: { taskUrl: `/tasks/${taskId}` }, createdAt: new Date().toISOString(),
   });
 }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function addArtifact(snapshot, name, kind, refPath) {
   snapshot.artifacts.unshift({ id: nextId('artifact'), taskId, name, kind, path: refPath, createdAt: new Date().toISOString() });
 }
@@ -178,17 +179,28 @@ child.stdout.on('data', (chunk) => {
     persist((snapshot) => {
       const lower = line.toLowerCase();
 
-      // Detect phase transitions from output
-      if (line.includes('正在读取') || line.includes('read_file') || line.includes('search_files') || /analyzing|reading|inspecting|理解|分析/i.test(line)) {
+      // Detect approval keywords first
+      const APPROVAL_KW = ['command required approval', 'permission requested:', 'approval requested'];
+      if (APPROVAL_KW.some((kw) => lower.includes(kw))) {
+        setStatus(snapshot, 'approval_required', 'waiting_review', Math.max(snapshot.task.progressPercent, 62), '等待命令同意/权限批准', '等待人工同意某条命令/权限请求');
+        snapshot.task.needsHuman = true;
+        addEvent(snapshot, 'human.approval.required', 'warning', '需要人工审批：命令/权限请求', { text: line.slice(0, 200), channel: 'stdout' });
+        addNotification(snapshot, 'human.approval.required', 'sent');
+        addLog(snapshot, 'system', 'warning', '等待命令审批: ' + line.slice(0, 100));
+        return;
+      }
+
+      // Detect phase transitions from output (Chinese + English)
+      if (/分析|理解|评估|审查|查看|search|analyze|read_file|grep|inspect/i.test(line)) {
         setStatus(snapshot, 'running', 'triaging', 15, line.slice(0, 100), line.slice(0, 100));
         addEvent(snapshot, 'hermes.phase.changed', 'info', line.slice(0, 120), { phase: 'triaging' });
-      } else if (line.includes('正在创建') || line.includes('write_file') || line.includes('patch') || /creating|writing|implementing|building|生成|创建|编写/i.test(line)) {
+      } else if (/创建|编写|生成|修改|实现|重构|add|write|edit|create|implement|refactor|patch|modify/i.test(line)) {
         setStatus(snapshot, 'running', 'coding', 45, line.slice(0, 100), line.slice(0, 100));
         addEvent(snapshot, 'hermes.phase.changed', 'info', line.slice(0, 120), { phase: 'coding' });
-      } else if (line.includes('test') || line.includes('测试') || line.includes('运行') || line.includes('check') || /testing|validating|lint/i.test(line)) {
+      } else if (/test|验证|检查|lint|check|validate|build/i.test(line)) {
         setStatus(snapshot, 'running', 'testing', 78, line.slice(0, 100), line.slice(0, 100));
         addEvent(snapshot, 'hermes.phase.changed', 'info', line.slice(0, 120), { phase: 'testing' });
-      } else if (line.includes('完成') || line.includes('done') || line.includes('汇总') || line.includes('总结') || /completed|finished|summary|结果/i.test(line)) {
+      } else if (/完成|done|汇总|总结|completed|finished|summary|结果|result/i.test(line)) {
         setStatus(snapshot, 'running', 'summarizing', 92, line.slice(0, 100), line.slice(0, 100));
         addEvent(snapshot, 'hermes.phase.changed', 'success', line.slice(0, 120), { phase: 'summarizing' });
       }
@@ -204,7 +216,15 @@ child.stderr.on('data', (chunk) => {
   const line = chunk.toString().trim();
   if (!line) return;
   persist((snapshot) => {
-    addLog(snapshot, 'stderr', /error|failed/i.test(line) ? 'error' : 'warning', line.slice(0, 200));
+    const lower = line.toLowerCase();
+    const APPROVAL_KW = ['command required approval', 'permission requested:', 'approval requested'];
+    if (APPROVAL_KW.some((kw) => lower.includes(kw))) {
+      setStatus(snapshot, 'approval_required', 'waiting_review', Math.max(snapshot.task.progressPercent, 62), '等待命令同意/权限批准', '等待人工同意某条命令/权限请求');
+      snapshot.task.needsHuman = true;
+      addEvent(snapshot, 'human.approval.required', 'warning', '需要人工审批：命令/权限请求', { text: line.slice(0, 200), channel: 'stderr' });
+      addNotification(snapshot, 'human.approval.required', 'sent');
+    }
+    addLog(snapshot, 'stderr', /error|failed/i.test(lower) ? 'error' : 'warning', line.slice(0, 200));
   });
 });
 
