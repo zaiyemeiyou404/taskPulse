@@ -1,130 +1,104 @@
 # Task Pulse
 
-Task Pulse 是一个面向 AI Agent / coding runner 的实时任务看板，基于 Next.js App Router 构建。
+> 给 Hermes / OpenCode / DeepSeek 任务流做的实时驾驶舱。看见每个任务的状态、阶段、日志、通知与最终产物。
 
-它的目标不是单纯“提交任务”，而是把任务执行过程拆成可观察的事件流、日志流、状态时间线和产物面板，方便在浏览器里盯执行过程，尤其适合接 OpenCode / Hermes 这类执行器。
+![dashboard]
 
-## 现在能做什么
+## 项目简介
 
-- 实时查看任务列表与状态变化
-- 查看单个任务详情页
-- 通过 SSE 持续推送任务快照
-- 展示阶段时间线、事件流、日志、通知、产物
-- 为 coding 任务自动生成类似 GitHub Release Notes 的“功能更新”摘要
-- 支持删除、停止、重试任务
-- 支持自动从 prompt 推导更容易辨认的标题
-- 支持 demo / live 两种任务模式
+Task Pulse 是一个面向 AI Agent 和 Coding Runner 的实时任务看板，基于 **Next.js 16 + React 19 + Tailwind 4 + TypeScript** 构建。
 
-## 页面说明
+它的核心目标不是单纯提交任务，而是把任务执行过程拆成**可观察的事件流、日志流、状态时间线和产物面板**，方便在浏览器里盯执行过程。
 
-### `/`
-- 自动跳转到 `/tasks`
+适合配合 OpenCode、Hermes Agent、Codex 等执行器使用。
 
-### `/tasks`
-- 任务总览页
-- 包含任务列表、启动入口、删除入口
-- 当前通过客户端定时 `router.refresh()` 保持列表刷新
+---
 
-### `/tasks/[taskId]`
-- 单任务详情页
-- 展示：
-  - 顶部状态卡
-  - 任务摘要
-  - 功能更新（Markdown 渲染）
-  - 执行摘要
-  - 阶段时间线
-  - 实时事件流
-  - 实时日志
-  - 产物 / 文件 / 通知 / 原始 JSON
+## 页面一览
 
-## API 说明
+### 总览看板 `/`
 
-### `GET /api/tasks`
-返回任务列表。
+![dashboard-expanded]
 
-### `POST /api/tasks`
-创建任务。
+- 统计卡片：运行中、已阻塞、待审批、已完成、失败、总数
+- 启动任务面板：选择 Agent（OpenCode / Hermes）、任务类型、填写 prompt
+- 按大任务分组的实时任务列表，支持：
+  - 搜索 / 状态筛选 / 类别筛选
+  - 点击展开查看子任务及修改时间
+  - **整行可点击**跳转详情页（优化移动端触摸体验）
 
-示例：
+### 任务详情 `/tasks/[taskId]`
 
-```bash
-curl -X POST http://127.0.0.1:3000/api/tasks \
-  -H 'Content-Type: application/json' \
-  --data '{
-    "prompt": "验证 Task Pulse 的详情页、事件流和日志面板",
-    "category": "coding",
-    "runner": "opencode",
-    "model": "deepseek/deepseek-chat",
-    "source": "weixin",
-    "mode": "demo"
-  }'
-```
+![detail]
 
-请求体字段：
+- 实时状态卡：阶段、耗时、最近更新时间、事件数、日志数、通知数
+- 快速入口：产物链接、通知链接
+- 任务摘要：通俗易懂的中文说明
+- 阶段时间线：生命周期可视化（排队 → 评估 → 启动 → 编码 → 测试 → 汇总 → 完成）
+- 操作按钮：批准命令 / 停止 / 重试 / 删除 / 复制 ID
 
-- `title`: 可选，任务标题
-- `prompt`: 可选，任务描述
-- `category`: `chat | ppt | paper | coding`
-- `runner`: 例如 `opencode` / `hermes`
-- `model`: 模型名
-- `source`: 任务来源
-- `mode`: `demo | live`
-- `cwd`: 执行工作目录
+![detail-events]
 
-### `GET /api/tasks/[taskId]`
-返回单个任务的完整快照。
+- **事件流**：Agent 正在执行的语义化时间线（SSE 实时推送）
+- **实时日志**：原始 stdout / stderr / system 流，支持自动滚动
+- 标签页：概览 / 产物 / 文件 / 通知 / 原始 JSON
+- coding 任务自动生成**功能更新摘要**（类似 GitHub Release Notes）
+- chat 任务展示**聊天处理记录**（请求 → 分析 → 回复链路）
 
-### `GET /api/tasks/[taskId]/stream`
-任务详情页使用的 SSE 流。
+---
 
-### `POST /api/tasks/[taskId]/stop`
-停止任务。
+## 主要功能
 
-### `POST /api/tasks/[taskId]/retry`
-重试任务。
+| 功能 | 说明 |
+|------|------|
+| ✅ 实时仪表盘 | 统计卡片 + 搜索 + 筛选 + 分组折叠 |
+| ✅ SSE 实时推送 | 基于版本变化的 Server-Sent Events，1 秒心跳保活 |
+| ✅ 任务详情页 | 阶段时间线、事件流、日志、产物 |
+| ✅ 命令审批 | 支持 `approval_required` 状态，页面批准按钮 |
+| ✅ 产物展示 | 链接跳转 / 文件下载 / 内联展示 |
+| ✅ 操作支持 | 停止、重试、删除、复制 ID |
+| ✅ 任务分组 | 按项目/大任务自动分组，支持仓库链接 |
+| ✅ 中文界面 | 全中文 UI，状态/阶段/摘要均为中文 |
+| ✅ 运行截图 | 见上方预览图 |
+| ✅ 移动端适配 | 整行可点击，触摸友好 |
 
-### `POST /api/tasks/[taskId]/delete`
-删除任务。
+---
 
-## 启动方式
+## 快速开始
 
-### 1. 安装依赖
+### 环境要求
+
+- Node.js >= 18
+- npm
+
+### 安装与启动
 
 ```bash
+# 安装依赖
 npm install
-```
 
-### 2. 开发模式
-
-```bash
+# 开发模式
 npm run dev
-```
 
-### 3. 生产模式
-
-```bash
+# 生产模式
 npm run build
 npm run start
 ```
 
-默认地址：
+默认地址：`http://localhost:3000`
 
-- 本地：`http://127.0.0.1:3000`
-- 浏览器访问：`http://localhost:3000`
+### 创建测试任务
 
-## 如何创建测试任务
+**方式一：页面创建**
+打开首页，填写 prompt 和 Agent 类型，点击启动。
 
-### 方式一：页面里直接创建
-
-打开 `/tasks`，填写标题 / prompt，选择 runner 和 category，直接启动。
-
-### 方式二：用 API 创建 demo 任务
+**方式二：API 创建**
 
 ```bash
-curl -X POST http://127.0.0.1:3000/api/tasks \
+curl -X POST http://localhost:3000/api/tasks \
   -H 'Content-Type: application/json' \
   --data '{
-    "prompt": "在任务详情页验证 release notes 摘要、删除任务按钮和更好的自动标题",
+    "prompt": "验证 Task Pulse 详情页功能",
     "category": "coding",
     "runner": "opencode",
     "model": "deepseek/deepseek-chat",
@@ -133,96 +107,92 @@ curl -X POST http://127.0.0.1:3000/api/tasks \
   }'
 ```
 
-返回 JSON 里的 `task.id` 可以直接拼成详情页地址：
+返回的 `task.id` 可拼成详情页地址 `/tasks/<taskId>`。
 
-```text
-/tasks/<taskId>
+---
+
+## API 文档
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/tasks` | GET | 获取任务列表 |
+| `/api/tasks` | POST | 创建新任务 |
+| `/api/tasks/[taskId]` | GET | 获取单个任务快照 |
+| `/api/tasks/[taskId]/stream` | GET | SSE 实时流 |
+| `/api/tasks/[taskId]/approve` | POST | 批准命令/权限请求 |
+| `/api/tasks/[taskId]/stop` | POST | 停止任务 |
+| `/api/tasks/[taskId]/retry` | POST | 重试任务 |
+| `/api/tasks/[taskId]/delete` | POST | 删除任务 |
+| `/api/tasks/[taskId]/artifact/[artifactId]` | GET | 下载产物文件 |
+
+---
+
+## 架构说明
+
+### 数据流
+
+```
+浏览器 ──HTTP/SSE──▶ Next.js 服务端 ──读写──▶ .task-pulse-data/*.json
+                                                    │
+                                              spawn ▼
+                                        runner 脚本 (OpenCode / Hermes)
 ```
 
-例如：
-
-```text
-/tasks/task_1779333359923_1
-```
-
-## 目录结构
+### 核心目录结构
 
 ```text
 src/
-  app/
-    page.tsx                       # 根路由，跳转到 /tasks
-    layout.tsx                     # 全局布局
-    tasks/
-      page.tsx                     # 任务总览页
-      [taskId]/page.tsx            # 任务详情页
-    api/tasks/
-      route.ts                     # 任务列表 / 创建任务
-      [taskId]/route.ts            # 单任务快照
-      [taskId]/stream/route.ts     # SSE 推送
-      [taskId]/stop/route.ts       # 停止任务
-      [taskId]/retry/route.ts      # 重试任务
-      [taskId]/delete/route.ts     # 删除任务
-  components/task-pulse/
-    dashboard.tsx                  # 总览页主体
-    dashboard-client.tsx           # 总览页轮询刷新 / 删除按钮
-    task-launcher.tsx              # 任务创建表单
-    task-detail-client.tsx         # 详情页客户端 UI
-    flow-pipeline.tsx              # 流程可视化
-  lib/task-pulse/
-    store.ts                       # 内存态 + 持久化快照 + runner 编排
-    mock-data.ts                   # 初始化 demo 数据
-    types.ts                       # 类型定义
-    utils.ts                       # 标题推导、摘要生成等工具函数
+├── app/
+│   ├── api/tasks/             # API 路由（CRUD + SSE + 操作）
+│   ├── tasks/                 # 页面路由（总览 + 详情）
+│   ├── layout.tsx             # 全局布局
+│   └── page.tsx               # 根路由
+├── components/task-pulse/     # UI 组件
+│   ├── dashboard.tsx          # 总览页
+│   ├── dashboard-client.tsx   # 客户端交互（按钮）
+│   ├── task-detail-client.tsx # 详情页
+│   ├── task-filterable-section.tsx  # 任务列表（搜索/筛选/分组）
+│   ├── task-launcher.tsx      # 任务创建面板
+│   └── flow-pipeline.tsx      # 流程可视化
+├── lib/task-pulse/
+│   ├── store.ts               # 状态管理 + runner 编排
+│   ├── types.ts               # 类型定义
+│   ├── utils.ts               # 工具函数
+│   ├── mock-data.ts           # Demo 数据
+│   └── __tests__/             # 单元测试
 scripts/
-  task-pulse-live-runner.js        # live runner 脚本
-  task-pulse-hermes-runner.js      # Hermes runner 脚本
-.task-pulse-data/                  # 持久化任务快照 / 日志
+├── task-pulse-live-runner.js       # OpenCode runner 脚本
+└── task-pulse-hermes-runner.js     # Hermes runner 脚本
+.task-pulse-data/                   # 持久化任务快照
 ```
 
-## 数据与运行机制
+### 实时更新机制
 
-- 任务快照保存在 `.task-pulse-data/`
-- 详情页优先读取快照文件，再回退到内存态
-- SSE 基于任务快照版本变化推送更新
-- demo 任务使用本地模拟脚本推进状态
-- live 任务可以由外部 runner 持续写回快照
+- 任务快照以 JSON 文件持久化在 `.task-pulse-data/`
+- 每次状态变更增加版本号（`version++`）
+- SSE 端点每秒轮询版本号，变化时推送完整快照
+- Runner 脚本通过写文件 → SSE 自动推送到浏览器
 
-## Markdown 渲染说明
+---
 
-`coding` 类型任务的“功能更新”区域现在会对 Markdown 做真正渲染，而不是把 `##`、`-`、`` `code` `` 当普通文本显示。
+## 技术栈
 
-当前已处理的常见元素：
+- **Next.js 16** (App Router, React Server Components)
+- **React 19** (Server Actions, Hooks)
+- **Tailwind CSS 4** (暗色主题)
+- **TypeScript**
+- **SSE** (Server-Sent Events)
+- **Lucide React** (图标)
+- **Framer Motion** (动画)
+- **React Markdown** (Markdown 渲染)
 
-- 标题
-- 段落
-- 无序 / 有序列表
-- 行内代码
-- 代码块
-- 加粗
+---
 
-## 已知限制
+## LICENSE
 
-- 当前任务列表刷新依赖前端轮询，不是纯 SSE
-- 任务存储仍然是本地文件快照，不是数据库
-- 删除任务目前是本地文件级删除 / 重命名，不是软删除系统
-- demo 任务的执行内容是模拟出来的，不代表真实 runner 输出
-- live runner 与外部平台（如微信 / n8n / 本地电脑）之间的完整生产级编排还没完全收口
-- `npm install` 后可能会看到依赖审计告警，需要后续单独评估
+MIT
 
-## 推荐测试顺序
-
-1. 启动服务
-2. 打开 `/tasks`
-3. 创建一个 `coding + demo` 任务
-4. 打开任务详情页确认不再 404
-5. 检查“功能更新”是否按 Markdown 显示标题 / 列表 / 代码
-6. 测试停止 / 重试 / 删除按钮
-7. 观察任务列表是否自动刷新
-
-## 后续可以继续补的方向
-
-- 用数据库替代文件快照
-- 让任务总览页也切到 SSE / websocket
-- 接入真正的 OpenCode / Hermes / Codex 执行反馈
-- 增加任务筛选、搜索、归档
-- 补认证、权限和审计日志
+[dashboard]: /screenshots/dashboard.png
+[dashboard-expanded]: /screenshots/dashboard-expanded.png
+[detail]: /screenshots/detail.png
+[detail-events]: /screenshots/detail-events.png
