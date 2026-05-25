@@ -59,6 +59,14 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8 lg:px-10">
+      {/* 返回首页 */}
+      <button
+        onClick={() => router.push("/tasks")}
+        className="group inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 transition hover:border-cyan-300/20 hover:bg-cyan-400/10 hover:text-cyan-200"
+      >
+        <svg className="h-4 w-4 transition group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
+        <span>返回首页</span>
+      </button>
       <section className="rounded-[30px] border border-white/10 bg-[linear-gradient(135deg,rgba(124,140,255,0.14),rgba(10,12,18,0.96),rgba(61,217,197,0.08))] p-8 shadow-[0_20px_80px_rgba(5,8,15,0.55)] backdrop-blur-xl">
         <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-5">
