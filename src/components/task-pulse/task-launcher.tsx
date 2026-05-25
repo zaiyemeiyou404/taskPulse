@@ -18,6 +18,7 @@ export function TaskLauncher() {
   const [runner, setRunner] = useState<string>("opencode");
   const [category, setCategory] = useState<TaskCategory>("coding");
   const [groupName, setGroupName] = useState("");
+  const [model, setModel] = useState("deepseek/deepseek-chat");
   const [repoLink, setRepoLink] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export function TaskLauncher() {
           prompt: prompt || "执行新任务。",
           runner,
           category,
-          model: "deepseek/deepseek-chat",
+          model: model || "deepseek/deepseek-chat",
           source: "控制台",
           mode: "live",
           cwd: "/home/ubuntu/task-pulse",
@@ -164,8 +165,28 @@ export function TaskLauncher() {
           {submitting ? "启动中..." : `启动 ${runner === "hermes" ? "Hermes" : "OpenCode"} 任务`}
         </button>
         <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
-          <WandSparkles className="h-4 w-4 text-cyan-200" />
-          模型: deepseek/deepseek-chat
+          <WandSparkles className="h-4 w-4 text-cyan-200 shrink-0" />
+          <span>模型:</span>
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            className="bg-transparent text-white outline-none cursor-pointer appearance-none"
+          >
+            <optgroup label="🤖 Hermes (GPT)">
+              <option value="gpt-5.4" className="bg-[#1a1a2e] text-white">gpt-5.4</option>
+              <option value="gpt-5.5" className="bg-[#1a1a2e] text-white">gpt-5.5</option>
+            </optgroup>
+            <optgroup label="🧠 DeepSeek (OpenCode)">
+              <option value="deepseek/deepseek-chat" className="bg-[#1a1a2e] text-white">deepseek/deepseek-chat</option>
+              <option value="deepseek/deepseek-reasoner" className="bg-[#1a1a2e] text-white">deepseek/deepseek-reasoner</option>
+            </optgroup>
+            <optgroup label="🔌 其他">
+              <option value="gpt-4o" className="bg-[#1a1a2e] text-white">gpt-4o</option>
+              <option value="gpt-4o-mini" className="bg-[#1a1a2e] text-white">gpt-4o-mini</option>
+              <option value="claude-sonnet-4" className="bg-[#1a1a2e] text-white">claude-sonnet-4</option>
+              <option value="claude-sonnet-4-20250514" className="bg-[#1a1a2e] text-white">claude-sonnet-4-20250514</option>
+            </optgroup>
+          </select>
         </div>
         {error ? <div className="text-sm text-rose-300">{error}</div> : null}
       </div>
