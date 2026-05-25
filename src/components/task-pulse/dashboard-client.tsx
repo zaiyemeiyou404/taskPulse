@@ -1,10 +1,18 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Trash2 } from "lucide-react";
 
 export function DashboardClient({ children }: { children: ReactNode }) {
+  const router = useRouter();
+
+  // 每 5 秒自动刷新任务列表
+  useEffect(() => {
+    const interval = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(interval);
+  }, [router]);
+
   return <>{children}</>;
 }
 
