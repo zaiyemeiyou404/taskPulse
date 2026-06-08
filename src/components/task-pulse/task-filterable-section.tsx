@@ -8,7 +8,7 @@ import { Task, TaskCategory, TaskStatus } from "@/lib/task-pulse/types";
 
 export function TaskFilterableSection({ tasks, groups }: { tasks: Task[]; groups: { id: string; name: string; category: TaskCategory; summary: string; childTaskIds: string[]; repoLink?: string }[] }) {
   const allStatuses: TaskStatus[] = ["queued", "running", "blocked", "approval_required", "done", "failed", "stopped"];
-  const allCategories: TaskCategory[] = ["chat", "ppt", "paper", "coding"];
+  const allCategories: TaskCategory[] = ["chat", "ppt", "paper", "coding", "skill", "novel"];
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
@@ -209,6 +209,10 @@ function SubTaskRow({ task }: { task: Task }) {
       href={`/tasks/${task.id}`}
       className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2.5 text-sm transition hover:bg-white/[0.06] active:bg-white/[0.08]"
     >
+      <span className={cn("inline-flex items-center gap-1.5 shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-medium", categoryInfo[task.category]?.color)}>
+        <span>{categoryInfo[task.category]?.icon}</span>
+        {categoryInfo[task.category]?.label}
+      </span>
       <span className="truncate text-slate-200 group-hover:text-cyan-200 transition-colors">{task.title}</span>
       <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium", statusStyles[task.status])}>{statusLabels[task.status]}</span>
       <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-slate-400">{phaseLabel(task.phase)}</span>

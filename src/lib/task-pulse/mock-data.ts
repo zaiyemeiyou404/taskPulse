@@ -1,8 +1,8 @@
-import { AUTO_GROUP_MAP, TaskArtifact, TaskEvent, TaskLog, TaskNotification, TaskSnapshot } from "./types";
+import { AUTO_GROUP_MAP, TaskArtifact, TaskCategory, TaskEvent, TaskLog, TaskNotification, TaskSnapshot } from "./types";
 
 const now = Date.now();
 
-function mockGroupId(category: "coding" | "chat", repoLink?: string): string {
+function mockGroupId(category: TaskCategory, repoLink?: string): string {
   const name = AUTO_GROUP_MAP[category];
   const seed = ((name || category) + (repoLink ? `::${repoLink}` : ""))
     .toLowerCase()
@@ -36,9 +36,9 @@ export const INITIAL_TASKS: TaskSnapshot[] = [
       logCount: 6,
       notificationCount: 1,
       progressPercent: 46,
-      metadata: { branch: "task-pulse/live-demo", host: "hermes-server", groupName: AUTO_GROUP_MAP.coding, repoLink: "https://github.com/user/task-pulse" },
-      groupId: mockGroupId("coding", "https://github.com/user/task-pulse"),
-      repoLink: "https://github.com/user/task-pulse",
+      metadata: { branch: "task-pulse/live-demo", host: "hermes-server", groupName: "Task Pulse 完善", repoLink: "https://github.com/zaiyemeiyou404/task-pulse" },
+      groupId: "group_task-pluse-完善-https-github-com-zaiyemeiyou404-ta",
+      repoLink: "https://github.com/zaiyemeiyou404/task-pulse",
     },
     events: [
       evt("task_demo_live", "task.created", "info", "任务已从微信请求创建", { source: "微信" }, now - 1000 * 60 * 11),
@@ -135,9 +135,9 @@ export const INITIAL_TASKS: TaskSnapshot[] = [
       logCount: 4,
       notificationCount: 2,
       progressPercent: 100,
-      metadata: { commit: "feat/kpi-cards", groupName: AUTO_GROUP_MAP.coding, repoLink: "https://github.com/user/task-pulse" },
-      groupId: mockGroupId("coding", "https://github.com/user/task-pulse"),
-      repoLink: "https://github.com/user/task-pulse",
+      metadata: { commit: "feat/kpi-cards", groupName: "Task Pulse 完善", repoLink: "https://github.com/zaiyemeiyou404/task-pulse" },
+      groupId: "group_task-pluse-完善-https-github-com-zaiyemeiyou404-ta",
+      repoLink: "https://github.com/zaiyemeiyou404/task-pulse",
     },
     events: [
       evt("task_done_metrics", "task.created", "info", "手动创建任务", {}, now - 1000 * 60 * 93),
@@ -181,9 +181,9 @@ export const INITIAL_TASKS: TaskSnapshot[] = [
       logCount: 3,
       notificationCount: 2,
       progressPercent: 62,
-      metadata: { groupName: AUTO_GROUP_MAP.coding, repoLink: "https://github.com/user/task-pulse" },
-      groupId: mockGroupId("coding", "https://github.com/user/task-pulse"),
-      repoLink: "https://github.com/user/task-pulse",
+      metadata: { groupName: "Task Pulse 完善", repoLink: "https://github.com/zaiyemeiyou404/task-pulse" },
+      groupId: "group_task-pluse-完善-https-github-com-zaiyemeiyou404-ta",
+      repoLink: "https://github.com/zaiyemeiyou404/task-pulse",
     },
     events: [
       evt("task_approval_cmd", "task.created", "info", "手动创建任务", {}, now - 1000 * 60 * 5),

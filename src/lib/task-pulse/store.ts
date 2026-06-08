@@ -242,12 +242,32 @@ function registerGroup(snapshot: TaskSnapshot) {
   return groupId;
 }
 
+function migrateChatToNovel(snapshot: TaskSnapshot): boolean {
+  if (snapshot.task.category !== "chat") return false;
+
+  const { metadata, prompt, title } = snapshot.task;
+  const groupName = typeof metadata.groupName === "string" ? metadata.groupName : "";
+  const cwd = typeof metadata.cwd === "string" ? metadata.cwd : "";
+  const t = (title || prompt || "").toLowerCase();
+  const signals = [
+    groupName.includes("小说创作"),
+    /\b(帝国边疆|小说|章节|大纲|世界观|写作|创作|故事|角色|情节|设定)\b/i.test(t),
+    cwd === "/home/ubuntu/novel",
+  ];
+  if (!signals.some(Boolean)) return false;
+
+  snapshot.task.category = "novel";
+  snapshot.task.metadata.category = "novel";
+  return true;
+}
+
 function readSnapshotFile(taskId: string) {
   const file = getTaskFile(taskId);
   if (!existsSync(file)) return null;
   const snapshot = JSON.parse(readFileSync(file, "utf8")) as TaskSnapshot;
+  const migrated = migrateChatToNovel(snapshot);
   const changed = normalizeSnapshotGrouping(snapshot);
-  if (changed) {
+  if (migrated || changed) {
     const tmp = `${file}.tmp`;
     writeFileSync(tmp, JSON.stringify(snapshot, null, 2));
     renameSync(tmp, file);
@@ -360,12 +380,15 @@ function addArtifact(taskId: string, name: string, kind: TaskArtifact["kind"], p
 function setStatus(taskId: string, status: TaskStatus, phase: TaskPhase, progressPercent: number, progressText: string, summary?: string) {
   const snapshot = TASKS.get(taskId);
   if (!snapshot) return;
-  snapshot.task.status = status;
-  snapshot.task.phase = phase;
+  // 任务完成时先进审查阶段，确认分组后才真正完成
+  const finalPhase = (phase === "completed" && status === "done") ? "waiting_review" as TaskPhase : phase;
+  const finalStatus = (phase === "completed" && status === "done") ? "done" as TaskStatus : status;
+  snapshot.task.status = finalStatus;
+  snapshot.task.phase = finalPhase;
   snapshot.task.progressPercent = progressPercent;
   snapshot.task.progressText = progressText;
   if (summary) snapshot.task.summary = summary;
-  if (["done", "failed", "stopped"].includes(status)) {
+  if (["done", "failed", "stopped"].includes(finalStatus)) {
     snapshot.task.endedAt = new Date().toISOString();
   }
   mark(taskId);
@@ -769,6 +792,42 @@ export function getGroupWithTasks(groupId: string): { group: TaskGroup; tasks: T
     group: { ...group, childTaskIds: tasks.map((t) => t.id) },
     tasks,
   };
+}
+
+export function confirmReview(taskId: string) {
+  ensureStoreBooted();
+  refreshDeletedIds();
+  const snapshot = TASKS.get(taskId);
+  if (!snapshot) return null;
+  snapshot.task.phase = "completed";
+  snapshot.task.progressText = "审查通过，任务完成";
+  snapshot.task.updatedAt = new Date().toISOString();
+  addEvent(taskId, "task.reviewed", "success", "审查分类确认完成", { groupName: snapshot.task.metadata?.groupName });
+  const file = getTaskFile(taskId);
+  if (existsSync(file)) writeSnapshotFile(snapshot);
+  return deepClone(snapshot);
+}
+
+export function updateTaskGroup(taskId: string, groupName?: string, category?: TaskCategory) {
+  ensureStoreBooted();
+  refreshDeletedIds();
+  const snapshot = TASKS.get(taskId);
+  if (!snapshot) return null;
+  if (groupName) {
+    const groupId = `group_${groupName.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48)}`;
+    snapshot.task.groupId = groupId;
+    snapshot.task.metadata.groupId = groupId;
+    snapshot.task.metadata.groupName = groupName;
+    addEvent(taskId, "task.group_changed", "info", `分组已更改为: ${groupName}`, { groupName, groupId });
+  }
+  if (category) {
+    snapshot.task.category = category;
+    snapshot.task.metadata.category = category;
+  }
+  snapshot.task.updatedAt = new Date().toISOString();
+  const file = getTaskFile(taskId);
+  if (existsSync(file)) writeSnapshotFile(snapshot);
+  return deepClone(snapshot);
 }
 
 export function retryTask(taskId: string) {

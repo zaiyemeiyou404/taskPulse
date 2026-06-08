@@ -126,6 +126,83 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
         </div>
       </section>
 
+      {/* ---- 审查分类 ---- */}
+      <section className={`rounded-[26px] border p-5 shadow-[0_12px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl ${
+        snapshot.task.phase === "waiting_review"
+          ? "border-violet-300/20 bg-violet-400/8"
+          : "border-amber-300/15 bg-amber-400/5"
+      }`}>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className={`text-lg font-semibold ${snapshot.task.phase === "waiting_review" ? "text-violet-200" : "text-amber-200"}`}>
+              {snapshot.task.phase === "waiting_review" ? "📋 审查分类（待确认）" : "审查分类"}
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">任务完成后检查并调整分组，确保归档正确。</p>
+          </div>
+          <span className={`rounded-full border px-3 py-1 text-xs ${
+            snapshot.task.phase === "waiting_review"
+              ? "border-violet-300/20 bg-violet-400/10 text-violet-200"
+              : "border-amber-300/20 bg-amber-400/10 text-amber-200"
+          }`}>Review</span>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-slate-300">
+            {snapshot.task.phase === "waiting_review" ? "归入哪个大任务？" : "当前分组："}
+          </span>
+          {snapshot.task.phase === "waiting_review" ? (
+            <>
+              <ReviewGroupSelect
+                taskId={snapshot.task.id}
+                initialGroup={(snapshot.task.metadata?.groupName as string) ?? ""}
+                onGroupChange={(updated) => setSnapshot(updated)}
+              />
+              <button
+                onClick={async () => {
+                  const res = await fetch(`/api/tasks/${snapshot.task.id}/review`, { method: "POST" });
+                  if (res.ok) {
+                    const updated = await res.json() as TaskSnapshot;
+                    setSnapshot(updated);
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-full border border-violet-300/20 bg-violet-400/15 px-5 py-2 text-sm font-medium text-violet-200 transition hover:bg-violet-400/25"
+              >
+                <Check className="h-4 w-4" />
+                确认分类，标记完成
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-sm font-medium text-white">
+                {(snapshot.task.metadata?.groupName as string) ?? "未分类"}
+              </span>
+              <select
+                value={(snapshot.task.metadata?.groupName as string) ?? ""}
+                onChange={async (e) => {
+                  const res = await fetch(`/api/tasks/${snapshot.task.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ groupName: e.target.value }),
+                  });
+                  if (res.ok) {
+                    const updated = await res.json() as TaskSnapshot;
+                    setSnapshot(updated);
+                  }
+                }}
+                className="rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm text-white outline-none transition focus:border-amber-300/30"
+              >
+                <option value="agent 仓库联调">agent 仓库联调</option>
+                <option value="task-Pluse 完善">task-Pluse 完善</option>
+                <option value="Hermes 配置备份">Hermes 配置备份</option>
+                <option value="日常聊天">日常聊天</option>
+                <option value="PPT 生成">PPT 生成</option>
+                <option value="论文产出">论文产出</option>
+                <option value="小说创作">小说创作</option>
+              </select>
+            </>
+          )}
+        </div>
+      </section>
+
       {/* ---- 快速入口 / Quick links ---- */}
       {(() => {
         const links = getTaskQuickLinks(snapshot);
@@ -211,8 +288,8 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
         );
       })()}
 
-      {/* ---- 聊天处理记录（chat 任务专属） ---- */}
-      {snapshot.task.category === "chat" && (() => {
+      {/* ---- 聊天/创作处理记录（chat / novel 任务专用） ---- */}
+      {(snapshot.task.category === "chat" || snapshot.task.category === "novel") && (() => {
         const chatTrace = snapshot.task.chatTrace ?? extractChatTrace(snapshot);
         if (chatTrace.length === 0) return null;
         const traceIcons: Record<string, string> = {
@@ -232,8 +309,8 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
         };
         return (
           <section className="rounded-[26px] border border-violet-300/15 bg-violet-400/5 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
-            <h2 className="text-lg font-semibold text-violet-200">💬 聊天处理记录</h2>
-            <p className="mt-1 text-sm text-slate-400">从请求到回复的完整处理链路。</p>
+            <h2 className="text-lg font-semibold text-violet-200">{snapshot.task.category === "novel" ? "📖 创作处理记录" : "💬 聊天处理记录"}</h2>
+            <p className="mt-1 text-sm text-slate-400">{snapshot.task.category === "novel" ? "从大纲到完稿的完整创作链路。" : "从请求到回复的完整处理链路。"}</p>
             <div className="mt-4 space-y-3">
               {chatTrace.map((rec, i) => (
                 <div key={i} className={cn("rounded-2xl border p-4", traceColors[rec.type] ?? "border-white/10 bg-black/10")}>
@@ -559,4 +636,75 @@ function streamTone(stream: string, level: string) {
   if (level === "success") return "text-emerald-300";
   if (stream === "system") return "text-cyan-300";
   return "text-slate-400";
+}
+
+const EXISTING_GROUPS = ["agent 仓库联调", "task-Pluse 完善", "Hermes 配置备份", "日常聊天", "PPT 生成", "论文产出", "小说创作"];
+
+function ReviewGroupSelect({ taskId, initialGroup, onGroupChange }: { taskId: string; initialGroup: string; onGroupChange: (snapshot: TaskSnapshot) => void }) {
+  const [mode, setMode] = useState<"select" | "new">("select");
+  const [customName, setCustomName] = useState("");
+
+  async function updateGroup(name: string) {
+    const res = await fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ groupName: name }),
+    });
+    if (res.ok) onGroupChange(await res.json() as TaskSnapshot);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {mode === "select" ? (
+        <>
+          <select
+            value={initialGroup}
+            onChange={(e) => {
+              if (e.target.value === "__new__") {
+                setMode("new");
+                return;
+              }
+              updateGroup(e.target.value);
+            }}
+            className="rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm text-white outline-none transition focus:border-violet-300/30"
+          >
+            <option value="" disabled>选择大任务</option>
+            {EXISTING_GROUPS.map((g) => (
+              <option key={g} value={g}>{g}</option>
+            ))}
+            <option value="__new__">➕ 新建分组</option>
+          </select>
+          <span className="text-xs text-slate-500">小任务选已有大任务归入</span>
+        </>
+      ) : (
+        <>
+          <input
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            placeholder="输入新分组名称"
+            className="rounded-full border border-violet-300/20 bg-black/30 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-violet-300/40"
+          />
+          <button
+            onClick={() => {
+              if (customName.trim()) {
+                updateGroup(customName.trim());
+                setMode("select");
+                setCustomName("");
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded-full border border-violet-300/20 bg-violet-400/10 px-3 py-2 text-xs text-violet-200 transition hover:bg-violet-400/20"
+          >
+            确认新建
+          </button>
+          <button
+            onClick={() => setMode("select")}
+            className="text-xs text-slate-500 hover:text-slate-300"
+          >
+            取消
+          </button>
+          <span className="text-xs text-slate-500">新功能开新大任务</span>
+        </>
+      )}
+    </div>
+  );
 }

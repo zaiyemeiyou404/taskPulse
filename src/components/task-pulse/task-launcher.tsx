@@ -56,9 +56,9 @@ export function TaskLauncher() {
     }
   }
 
-  const categories: TaskCategory[] = ["chat", "ppt", "paper", "coding"];
+  const categories: TaskCategory[] = ["chat", "ppt", "paper", "coding", "skill", "novel"];
   const catIcons: Record<TaskCategory, string> = {
-    chat: "💬", ppt: "📊", paper: "📝", coding: "💻",
+    chat: "💬", ppt: "📊", paper: "📝", coding: "💻", skill: "📐", novel: "📖",
   };
 
   return (

@@ -65,10 +65,12 @@ export function statusLabel(status: string) {
 }
 
 export const categoryInfo: Record<TaskCategory, { label: string; color: string; icon: string }> = {
-  chat:     { label: "聊天",    color: "border-violet-300/30 bg-violet-400/15 text-violet-200", icon: "💬" },
-  ppt:      { label: "生成PPT", color: "border-orange-300/30 bg-orange-400/15 text-orange-200",  icon: "📊" },
-  paper:    { label: "生成论文", color: "border-rose-300/30 bg-rose-400/15 text-rose-200",       icon: "📝" },
-  coding:   { label: "写代码",  color: "border-cyan-300/30 bg-cyan-400/15 text-cyan-200",        icon: "💻" },
+  chat:     { label: "聊天",    color: "border-violet-300/30 bg-violet-400/15 text-violet-200",   icon: "💬" },
+  ppt:      { label: "生成PPT", color: "border-orange-300/30 bg-orange-400/15 text-orange-200",    icon: "📊" },
+  paper:    { label: "生成论文", color: "border-rose-300/30 bg-rose-400/15 text-rose-200",         icon: "📝" },
+  coding:   { label: "写代码",  color: "border-cyan-300/30 bg-cyan-400/15 text-cyan-200",          icon: "💻" },
+  skill:    { label: "技能",   color: "border-emerald-300/30 bg-emerald-400/15 text-emerald-200", icon: "📐" },
+  novel:    { label: "小说创作", color: "border-pink-300/30 bg-pink-400/15 text-pink-200",          icon: "📖" },
 };
 
 export function inferTitle(prompt: string, category: TaskCategory, runner: string): string {
@@ -88,6 +90,8 @@ export function inferTitle(prompt: string, category: TaskCategory, runner: strin
     ppt: ["演示", "幻灯片", "PPT", "展示", "演讲"],
     paper: ["论文", "文章", "报告", "文献", "综述", "调研"],
     coding: ["实现", "编写", "创建", "重构", "修复", "优化", "添加", "开发"],
+    skill: ["技能", "提炼", "writeup", "CTF", "解题", "总结"],
+    novel: ["小说", "创作", "写作", "故事", "大纲", "章节", "世界观", "角色"],
   };
   const keywords = intentKeywords[category] ?? [];
   for (const kw of keywords) {
@@ -125,7 +129,7 @@ export function inferRepoLink(prompt: string): string | undefined {
 
 export function extractChatTrace(snapshot: TaskSnapshot): ChatTraceRecord[] {
   const { task, events, logs } = snapshot;
-  if (task.category !== "chat") return [];
+  if (task.category !== "chat" && task.category !== "novel") return [];
   const trace: ChatTraceRecord[] = [];
 
   const userEvent = events.find((e) => e.type === "task.created");
@@ -432,6 +436,24 @@ export const taskFlows: Record<TaskCategory, TaskFlow> = {
       { key: "design", label: "架构设计", icon: "🏛️" },
       { key: "implement", label: "编码实现", icon: "⌨️" },
       { key: "test", label: "测试验证", icon: "🧪" },
+    ],
+  },
+  skill: {
+    name: "技能提炼流程",
+    steps: [
+      { key: "read", label: "阅读资料", icon: "📖" },
+      { key: "analyze", label: "分析提炼", icon: "🧠" },
+      { key: "generalize", label: "抽象固化", icon: "📐" },
+      { key: "validate", label: "验证可用", icon: "✅" },
+    ],
+  },
+  novel: {
+    name: "小说创作流程",
+    steps: [
+      { key: "outline", label: "构思大纲", icon: "📋" },
+      { key: "worldbuild", label: "世界观设定", icon: "🌍" },
+      { key: "draft", label: "章节撰写", icon: "✍️" },
+      { key: "revise", label: "审校润色", icon: "🔍" },
     ],
   },
 };
