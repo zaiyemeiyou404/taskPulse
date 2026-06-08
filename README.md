@@ -188,7 +188,7 @@ scripts/
 
 MIT
 
-[dashboard]: public/screenshots/dashboard.png
-[dashboard-expanded]: public/screenshots/dashboard-expanded.png
-[detail]: public/screenshots/detail.png
-[detail-events]: public/screenshots/detail-events.png
+[dashboard]: https://raw.githubusercontent.com/zaiyemeiyou404/task-Pluse/main/public/screenshots/dashboard.png
+[dashboard-expanded]: https://raw.githubusercontent.com/zaiyemeiyou404/task-Pluse/main/public/screenshots/dashboard-expanded.png
+[detail]: https://raw.githubusercontent.com/zaiyemeiyou404/task-Pluse/main/public/screenshots/detail.png
+[detail-events]: https://raw.githubusercontent.com/zaiyemeiyou404/task-Pluse/main/public/screenshots/detail-events.png
