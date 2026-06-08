@@ -181,9 +181,9 @@ export const INITIAL_TASKS: TaskSnapshot[] = [
       logCount: 3,
       notificationCount: 2,
       progressPercent: 62,
-      metadata: { groupName: "Task Pulse 完善", repoLink: "https://github.com/zaiyemeiyou404/task-pulse" },
-      groupId: "group_task-pluse-完善-https-github-com-zaiyemeiyou404-ta",
-      repoLink: "https://github.com/zaiyemeiyou404/task-pulse",
+      metadata: { groupName: "Agent 仓库完善", repoLink: "https://github.com/zaiyemeiyou404/agent" },
+      groupId: "group_agent-仓库完善-https-github-com-zaiyemeiyou404-agent",
+      repoLink: "https://github.com/zaiyemeiyou404/agent",
     },
     events: [
       evt("task_approval_cmd", "task.created", "info", "手动创建任务", {}, now - 1000 * 60 * 5),
