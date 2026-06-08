@@ -1,6 +1,5 @@
-import { Activity, AlertTriangle, Bot, CheckCircle2, Clock3, Layers3, ShieldQuestion, Sparkles, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, Bot, CheckCircle2, Clock3, Layers3, ShieldQuestion, Sparkles, XCircle, ShieldOff } from "lucide-react";
 import { TaskFilterableSection } from "@/components/task-pulse/task-filterable-section";
-import { TaskLauncher } from "@/components/task-pulse/task-launcher";
 import { listGroups, listTasks } from "@/lib/task-pulse/store";
 import { cn, formatDuration } from "@/lib/task-pulse/utils";
 import type { Task } from "@/lib/task-pulse/types";
@@ -68,7 +67,20 @@ export function TaskDashboard() {
         </div>
       </section>
 
-      <TaskLauncher />
+      <section className="rounded-[22px] border border-amber-500/20 bg-gradient-to-br from-amber-400/8 to-yellow-500/5 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+        <div className="flex items-start gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-400/15">
+            <ShieldOff className="h-5 w-5 text-amber-300" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-200/90">只读模式 · 安全提示</h3>
+            <p className="text-sm leading-6 text-slate-300">
+              当前站点仅用于查看任务状态、日志与产物。网页端任务启动入口已关闭，以降低服务器暴露面。
+              如需创建新任务，请通过内部 CLI 或自动化渠道（n8n / 微信）提交。
+            </p>
+          </div>
+        </div>
+      </section>
 
       <TaskFilterableSection tasks={tasks} groups={groups} />
     </main>
