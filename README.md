@@ -188,7 +188,7 @@ scripts/
 
 MIT
 
-[dashboard]: /screenshots/dashboard.png
-[dashboard-expanded]: /screenshots/dashboard-expanded.png
-[detail]: /screenshots/detail.png
-[detail-events]: /screenshots/detail-events.png
+[dashboard]: public/screenshots/dashboard.png
+[dashboard-expanded]: public/screenshots/dashboard-expanded.png
+[detail]: public/screenshots/detail.png
+[detail-events]: public/screenshots/detail-events.png
