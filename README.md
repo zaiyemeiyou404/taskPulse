@@ -2,7 +2,7 @@
 
 > 给 Hermes / OpenCode / DeepSeek 任务流做的实时驾驶舱。看见每个任务的状态、阶段、日志、通知与最终产物。
 
-![dashboard](https://raw.githubusercontent.com/zaiyemeiyou404/task-Pluse/main/public/screenshots/dashboard.png)
+![dashboard](https://raw.githubusercontent.com/zaiyemeiyou404/task-Pluse/main/public/screenshots/dashboard-home-v2.png)
 
 ## 项目简介
 
