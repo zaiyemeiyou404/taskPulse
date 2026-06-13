@@ -17,7 +17,7 @@ let counter = 0;
 
 const OPENCODE_BIN = process.env.OPENCODE_BIN || "/home/ubuntu/.hermes/node/bin/opencode";
 const DEFAULT_MODEL = "deepseek/deepseek-chat";
-const DEFAULT_CWD = "/home/ubuntu/task-pulse";
+const DEFAULT_CWD = "/home/ubuntu/taskPulse";
 const DATA_DIR = path.join(DEFAULT_CWD, ".task-pulse-data");
 const LIVE_RUNNER_SCRIPT = path.join(DEFAULT_CWD, "scripts/task-pulse-live-runner.js");
 const HERMES_RUNNER_SCRIPT = path.join(DEFAULT_CWD, "scripts/task-pulse-hermes-runner.js");
@@ -249,16 +249,28 @@ function migrateChatToNovel(snapshot: TaskSnapshot): boolean {
   const groupName = typeof metadata.groupName === "string" ? metadata.groupName : "";
   const cwd = typeof metadata.cwd === "string" ? metadata.cwd : "";
   const t = (title || prompt || "").toLowerCase();
-  const signals = [
+  const webSignals = [
+    groupName.includes("网站制作") || groupName.includes("网站创作"),
+    /\b(网页|网站|html|landing page|星图网页|世界观网页|页面模块)\b/i.test(t),
+  ];
+  if (webSignals.some(Boolean)) {
+    snapshot.task.category = "web";
+    snapshot.task.metadata.category = "web";
+    return true;
+  }
+
+  const novelSignals = [
     groupName.includes("小说创作"),
-    /\b(帝国边疆|小说|章节|大纲|世界观|写作|创作|故事|角色|情节|设定)\b/i.test(t),
+    /\b(帝国边疆|小说|写作|提纲|章节|世界观|创作|故事|角色|情节|设定|大纲)\b/i.test(t),
     cwd === "/home/ubuntu/novel",
   ];
-  if (!signals.some(Boolean)) return false;
+  if (novelSignals.some(Boolean)) {
+    snapshot.task.category = "novel";
+    snapshot.task.metadata.category = "novel";
+    return true;
+  }
 
-  snapshot.task.category = "novel";
-  snapshot.task.metadata.category = "novel";
-  return true;
+  return false;
 }
 
 function readSnapshotFile(taskId: string) {

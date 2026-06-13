@@ -5,7 +5,7 @@ export const APPROVAL_KEYWORDS = [
   "approval requested",
 ];
 
-export type TaskCategory = "chat" | "ppt" | "paper" | "coding" | "skill" | "novel";
+export type TaskCategory = "chat" | "ppt" | "paper" | "coding" | "skill" | "novel" | "web" | "design";
 
 export type ChatTraceRecord = {
   step: string;
@@ -30,6 +30,8 @@ export const AUTO_GROUP_MAP: Record<TaskCategory, string> = {
   coding: "代码开发",
   skill: "技能提炼",
   novel: "小说创作",
+  web: "网站创作",
+  design: "设计任务",
 };
 
 export type TaskPhase =

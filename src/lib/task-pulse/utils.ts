@@ -71,6 +71,8 @@ export const categoryInfo: Record<TaskCategory, { label: string; color: string; 
   coding:   { label: "写代码",  color: "border-cyan-300/30 bg-cyan-400/15 text-cyan-200",          icon: "💻" },
   skill:    { label: "技能",   color: "border-emerald-300/30 bg-emerald-400/15 text-emerald-200", icon: "📐" },
   novel:    { label: "小说创作", color: "border-pink-300/30 bg-pink-400/15 text-pink-200",          icon: "📖" },
+  web:      { label: "网站创作", color: "border-indigo-300/30 bg-indigo-400/15 text-indigo-200",     icon: "🌐" },
+  design:   { label: "设计",   color: "border-fuchsia-300/30 bg-fuchsia-400/15 text-fuchsia-200", icon: "🎨" },
 };
 
 export function inferTitle(prompt: string, category: TaskCategory, runner: string): string {
@@ -91,7 +93,9 @@ export function inferTitle(prompt: string, category: TaskCategory, runner: strin
     paper: ["论文", "文章", "报告", "文献", "综述", "调研"],
     coding: ["实现", "编写", "创建", "重构", "修复", "优化", "添加", "开发"],
     skill: ["技能", "提炼", "writeup", "CTF", "解题", "总结"],
-    novel: ["小说", "创作", "写作", "故事", "大纲", "章节", "世界观", "角色"],
+    novel: ["小说", "创作", "写作", "故事", "大纲", "章节", "世界观", "角色", "帝国边疆"],
+    web: ["网页", "网站", "页面", "landing page", "worldview html", "html", "星图网页"],
+    design: ["设计", "UI", "UX", "原型"],
   };
   const keywords = intentKeywords[category] ?? [];
   for (const kw of keywords) {
@@ -454,6 +458,24 @@ export const taskFlows: Record<TaskCategory, TaskFlow> = {
       { key: "worldbuild", label: "世界观设定", icon: "🌍" },
       { key: "draft", label: "章节撰写", icon: "✍️" },
       { key: "revise", label: "审校润色", icon: "🔍" },
+    ],
+  },
+  web: {
+    name: "网站创作流程",
+    steps: [
+      { key: "infoarch", label: "信息架构", icon: "📐" },
+      { key: "design", label: "页面设计", icon: "🎨" },
+      { key: "implement", label: "前端实现", icon: "⌨️" },
+      { key: "verify", label: "联调验证", icon: "✅" },
+    ],
+  },
+  design: {
+    name: "设计流程",
+    steps: [
+      { key: "research", label: "需求理解", icon: "🔍" },
+      { key: "concept", label: "概念设计", icon: "💡" },
+      { key: "iterate", label: "方案迭代", icon: "🎨" },
+      { key: "deliver", label: "交付确认", icon: "✅" },
     ],
   },
 };

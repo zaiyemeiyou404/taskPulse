@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { Activity, Bell, Bot, Check, Clock3, Copy, ExternalLink, FileDown, FileJson2, FolderGit2, PauseCircle, PlayCircle, Sparkles, SquareTerminal, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { TaskFlowPipeline } from "@/components/task-pulse/flow-pipeline";
-import { TaskSnapshot } from "@/lib/task-pulse/types";
-import { artifactActionExternal, artifactActionHref, artifactActionLabel, artifactDisplayPath, artifactFileDownloadUrl, cn, extractChatTrace, formatDateTime, formatDuration, formatRelative, generateCodingReleaseNotes, getTaskQuickLinks, phaseLabel, summarizeTaskActions } from "@/lib/task-pulse/utils";
+import { TaskCategory, TaskSnapshot } from "@/lib/task-pulse/types";
+import { artifactActionExternal, artifactActionHref, artifactActionLabel, artifactDisplayPath, artifactFileDownloadUrl, categoryInfo, cn, extractChatTrace, formatDateTime, formatDuration, formatRelative, generateCodingReleaseNotes, getTaskQuickLinks, phaseLabel, summarizeTaskActions } from "@/lib/task-pulse/utils";
 
 const phaseOrder = ["queued", "triaging", "accepted", "booting_runner", "coding", "testing", "summarizing", "waiting_review", "completed", "failed"] as const;
 const tabs = ["概览", "产物", "文件", "通知", "原始JSON"] as const;
@@ -156,6 +156,29 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
                 initialGroup={(snapshot.task.metadata?.groupName as string) ?? ""}
                 onGroupChange={(updated) => setSnapshot(updated)}
               />
+              <span className="flex items-center gap-1.5 text-sm text-slate-300">
+                <span className="text-slate-400">类别：</span>
+              </span>
+              <select
+                value={snapshot.task.category}
+                onChange={async (e) => {
+                  const res = await fetch(`/api/tasks/${snapshot.task.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ category: e.target.value }),
+                  });
+                  if (res.ok) {
+                    const updated = await res.json() as TaskSnapshot;
+                    setSnapshot(updated);
+                  }
+                }}
+                className="rounded-full border border-white/10 bg-[#1a1d2e] px-4 py-2 text-sm text-white outline-none transition focus:border-violet-300/30"
+                style={{ colorScheme: "dark" }}
+              >
+                {(Object.entries(categoryInfo) as [TaskCategory, typeof categoryInfo[TaskCategory]][]).map(([key, info]) => (
+                  <option key={key} value={key} className="bg-[#1a1d2e] text-white">{info.icon} {info.label}</option>
+                ))}
+              </select>
               <button
                 onClick={async () => {
                   const res = await fetch(`/api/tasks/${snapshot.task.id}/review`, { method: "POST" });
@@ -188,15 +211,43 @@ export function TaskDetailClient({ initialSnapshot }: { initialSnapshot: TaskSna
                     setSnapshot(updated);
                   }
                 }}
-                className="rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm text-white outline-none transition focus:border-amber-300/30"
+                className="rounded-full border border-white/10 bg-[#1a1d2e] px-4 py-2 text-sm text-white outline-none transition focus:border-amber-300/30"
+                style={{ colorScheme: "dark" }}
               >
-                <option value="agent 仓库联调">agent 仓库联调</option>
-                <option value="task-Pluse 完善">task-Pluse 完善</option>
-                <option value="Hermes 配置备份">Hermes 配置备份</option>
-                <option value="日常聊天">日常聊天</option>
-                <option value="PPT 生成">PPT 生成</option>
-                <option value="论文产出">论文产出</option>
-                <option value="小说创作">小说创作</option>
+                <option value="" disabled className="bg-[#1a1d2e] text-white/60">选择大任务</option>
+                <option value="agent 仓库联调" className="bg-[#1a1d2e] text-white">agent 仓库联调</option>
+                <option value="Task Pulse 完善" className="bg-[#1a1d2e] text-white">Task Pulse 完善</option>
+                <option value="Hermes 配置备份" className="bg-[#1a1d2e] text-white">Hermes 配置备份</option>
+                <option value="日常聊天" className="bg-[#1a1d2e] text-white">日常聊天</option>
+                <option value="PPT 生成" className="bg-[#1a1d2e] text-white">PPT 生成</option>
+                <option value="论文产出" className="bg-[#1a1d2e] text-white">论文产出</option>
+                <option value="小说创作" className="bg-[#1a1d2e] text-white">小说创作</option>
+                <option value="网站创作" className="bg-[#1a1d2e] text-white">网站创作</option>
+              </select>
+              <span className="mx-1 text-xs text-slate-500">|</span>
+              <span className="flex items-center gap-1.5 text-sm text-slate-300">
+                {(categoryInfo[snapshot.task.category as TaskCategory]?.icon ?? "")}
+                <span className="text-slate-400">类别：</span>
+              </span>
+              <select
+                value={snapshot.task.category}
+                onChange={async (e) => {
+                  const res = await fetch(`/api/tasks/${snapshot.task.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ category: e.target.value }),
+                  });
+                  if (res.ok) {
+                    const updated = await res.json() as TaskSnapshot;
+                    setSnapshot(updated);
+                  }
+                }}
+                className="rounded-full border border-white/10 bg-[#1a1d2e] px-4 py-2 text-sm text-white outline-none transition focus:border-amber-300/30"
+                style={{ colorScheme: "dark" }}
+              >
+                {(Object.entries(categoryInfo) as [TaskCategory, typeof categoryInfo[TaskCategory]][]).map(([key, info]) => (
+                  <option key={key} value={key} className="bg-[#1a1d2e] text-white">{info.icon} {info.label}</option>
+                ))}
               </select>
             </>
           )}
@@ -638,7 +689,7 @@ function streamTone(stream: string, level: string) {
   return "text-slate-400";
 }
 
-const EXISTING_GROUPS = ["agent 仓库联调", "task-Pluse 完善", "Hermes 配置备份", "日常聊天", "PPT 生成", "论文产出", "小说创作"];
+const EXISTING_GROUPS = ["agent 仓库联调", "Task Pulse 完善", "Hermes 配置备份", "日常聊天", "PPT 生成", "论文产出", "小说创作", "网站创作"];
 
 function ReviewGroupSelect({ taskId, initialGroup, onGroupChange }: { taskId: string; initialGroup: string; onGroupChange: (snapshot: TaskSnapshot) => void }) {
   const [mode, setMode] = useState<"select" | "new">("select");
@@ -666,13 +717,14 @@ function ReviewGroupSelect({ taskId, initialGroup, onGroupChange }: { taskId: st
               }
               updateGroup(e.target.value);
             }}
-            className="rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm text-white outline-none transition focus:border-violet-300/30"
+            className="rounded-full border border-white/10 bg-[#1a1d2e] px-4 py-2 text-sm text-white outline-none transition focus:border-violet-300/30"
+            style={{ colorScheme: "dark" }}
           >
-            <option value="" disabled>选择大任务</option>
+            <option value="" disabled className="bg-[#1a1d2e] text-white/60">选择大任务</option>
             {EXISTING_GROUPS.map((g) => (
-              <option key={g} value={g}>{g}</option>
+              <option key={g} value={g} className="bg-[#1a1d2e] text-white">{g}</option>
             ))}
-            <option value="__new__">➕ 新建分组</option>
+            <option value="__new__" className="bg-[#1a1d2e] text-white">➕ 新建分组</option>
           </select>
           <span className="text-xs text-slate-500">小任务选已有大任务归入</span>
         </>
